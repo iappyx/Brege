@@ -186,9 +186,16 @@ tested on a Mac with macOS 26 and on a Pixel phone and an Android tablet.
 Paused or not planned: an Android desktop mode window, a system camera extension for the Mac (needs
 a paid Apple developer account), and speakerphone control from the Mac.
 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ## License
 
 Brêge is released under the [MIT License](LICENSE), © 2026 [iappyx](https://iappyx.github.io/).
+
 It includes the scrcpy server (Apache 2.0) for the phone screen. Third-party components and their
 licenses are listed in the apps (Settings › About › Acknowledgements on the Mac, About Brêge on the
 phone).
+
+## Support
+
+If you find Brêge useful, consider [buying me a coffee](https://ko-fi.com/iappyx).
