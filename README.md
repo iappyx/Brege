@@ -13,8 +13,7 @@ networking, pairing and encryption.
   </picture>
 </p>
 
-> Screenshots show made-up phones, people and networks. They are rendered from the real app
-> windows by `scripts/screenshots.sh`, which never reads real data (see [Screenshots](#screenshots)).
+> Screenshots show made-up phones, people and networks.
 
 ## What it does
 
@@ -165,19 +164,6 @@ then asks for Keychain access again after each rebuild.
    - **Phone hotspot:** choose the phone's hotspot network in Settings › Phones.
    - **Microphone:** click Microphone on the phone in the menu; Brêge installs its audio device once.
    - **Wi‑Fi names on the phone:** "Show Wi‑Fi names" in the phone app's Networks card.
-
-## Screenshots
-
-The images in this README are generated, not captured from a real session:
-
-```sh
-scripts/screenshots.sh           # Mac windows, light and dark, into docs/screenshots
-scripts/screenshots.sh android   # phone app, on an unlocked phone with the debug build
-```
-
-The Mac app renders its own windows with `--screenshots <folder>`: it fills the views with made-up
-phones, conversations, photos and networks and does not start its core, read the Keychain, look at
-Wi‑Fi networks or show notifications. The Android debug build has a matching screenshot mode.
 
 ## Project layout
 
