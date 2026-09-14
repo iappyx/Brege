@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "tools/*"]
+
+[workspace.package]
+version = "1.0.0-beta.1"
+edition = "2024"
+license = "MIT"
+authors = ["iappyx"]
+homepage = "https://iappyx.github.io/"
+publish = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = "debuginfo"

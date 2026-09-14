@@ -1,0 +1,6 @@
+[bindings.kotlin]
+# Generates the API-level-aware cleaner (java.lang.ref.Cleaner only exists from API 33).
+android = true
+
+[bindings.swift]
+module_name = "brege_ffi"

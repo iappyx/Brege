@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Brêge</string>
+    <string name="share_to_mac">Send to Mac</string>
+    <string name="tile_send_clipboard">Send clipboard</string>
+    <string name="channel_service">Connection</string>
+    <string name="channel_events">Files, links and alerts</string>
+</resources>

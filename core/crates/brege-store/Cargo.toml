@@ -1,0 +1,21 @@
+[package]
+name = "brege-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+brege-identity = { version = "1.0.0-beta.1", path = "../brege-identity" }
+rusqlite_migration = "2.6"
+thiserror = "2.0.20"
+
+# SQLCipher: CommonCrypto on Apple platforms, vendored OpenSSL on Android.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

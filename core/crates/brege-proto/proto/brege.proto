@@ -1,0 +1,559 @@
+// Brêge wire protocol, version 1.
+// Rules: never renumber or reuse field numbers; unknown payloads are ignored by receivers.
+syntax = "proto3";
+
+package brege.v1;
+
+// ---------------------------------------------------------------------------
+// Pairing (ALPN brege-pair/1 only)
+// ---------------------------------------------------------------------------
+
+message PairRequest {
+  string name = 1;                  // e.g. "Pixel 9"
+  Platform platform = 2;
+  string model = 3;
+  bytes proof = 4;                  // HMAC-SHA256(token, TLS exporter)
+}
+
+message PairResponse {
+  enum Result {
+    RESULT_UNSPECIFIED = 0;
+    ACCEPTED = 1;
+    REJECTED_BY_USER = 2;
+    INVALID_PROOF = 3;
+    TOKEN_EXPIRED = 4;
+  }
+  Result result = 1;
+  string name = 2;                  // responder's device name
+  Platform platform = 3;
+  bytes presence_key = 4;           // 32 bytes; only when ACCEPTED
+}
+
+enum Platform {
+  PLATFORM_UNSPECIFIED = 0;
+  MACOS = 1;
+  ANDROID = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Control stream (ALPN brege/1)
+// ---------------------------------------------------------------------------
+
+message Envelope {
+  uint64 seq   = 1;                 // monotonic per sender, for ack/dedupe
+  uint64 ack   = 2;                 // last seq received
+  int64  ts_ms = 3;
+  oneof payload {
+    Hello            hello            = 9;
+    Clipboard        clipboard        = 10;
+    NotificationPost notification     = 11;
+    NotificationAct  notification_act = 12;
+    TransferOffer    transfer_offer   = 15;
+    StatusUpdate     status           = 16;
+    OpenActivity     open_activity    = 17;
+    Command          command          = 18;
+    FsChanged        fs_changed       = 19;
+    Unpair           unpair           = 20;
+    NotificationRemoved notification_removed = 21;
+    TransferAccept   transfer_accept  = 22;
+    TransferCancel   transfer_cancel  = 23;
+    MediaState       media            = 24;
+    Ping             ping             = 25;
+    SmsSyncRequest   sms_sync_request = 26;
+    SmsHistoryRequest sms_history_request = 27;
+    SmsThreadList    sms_threads      = 28;
+    SmsMessageList   sms_messages     = 29;
+    SmsSend          sms_send         = 30;
+    SmsSendStatus    sms_send_status  = 31;
+    SimList          sims             = 32;
+    CallState        call_state       = 33;
+    CallAction       call_action      = 34;
+    MicState         mic_state        = 35;
+    ContactPhotoRequest contact_photo_request = 36;
+    ContactPhotoList contact_photos   = 37;
+    AppListRequest   app_list_request = 38;
+    AppList          app_list         = 39;
+    CaptureRequest   capture_request  = 40;
+    CaptureResult    capture_result   = 41;
+    OngoingActivity     ongoing_activity    = 42;
+    OngoingActivityEnded ongoing_activity_ended = 43;
+    RecentMediaRequest recent_media_request = 44;
+    RecentMediaList  recent_media     = 45;
+    MediaFetchRequest media_fetch     = 46;
+    CameraRequest    camera_request   = 47;
+    CameraState      camera_state     = 48;
+  }
+  // 13 and 14 were placeholder SMS/call messages in early builds.
+  reserved 13, 14;
+}
+
+// First message on a control stream, in both directions.
+message Hello {
+  string name = 1;
+  Platform platform = 2;
+  string app_version = 3;
+  repeated string features = 4;     // enabled feature modules, e.g. "clipboard"
+  uint32 listen_port = 5;           // UDP port the sender accepts connections on
+}
+
+message Ping {}
+
+message Unpair {}
+
+// Clipboard
+message Clipboard {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    TEXT = 1;
+    PNG = 2;
+  }
+  Kind kind = 1;
+  bytes data = 2;                   // UTF-8 for TEXT; ≤ 10 MB
+  uint64 origin_change_id = 3;      // sender's local change counter, for echo suppression
+}
+
+// Notifications
+message NotificationPost {
+  string key = 1;
+  string package = 2;
+  string app_label = 3;
+  string title = 4;
+  string text = 5;
+  string big_text = 6;
+  repeated ConversationLine conversation = 7;
+  int64 posted_ms = 8;
+  string group_key = 9;
+  repeated NotificationAction actions = 10;
+  string icon_ref = 11;             // BLAKE3 hex of the PNG; bytes sent once via icon_png
+  bytes icon_png = 12;
+  bytes picture = 13;               // ≤ 256 KB
+  bytes sender_icon = 14;           // conversation / sender avatar (the large icon), ≤ 64 KB
+  string call_number = 15;          // missed-call notifications: the Mac offers Call Back / Message itself
+}
+
+message ConversationLine {
+  string sender = 1;
+  string text = 2;
+  int64 ts_ms = 3;
+}
+
+message NotificationAction {
+  string label = 1;
+  bool accepts_reply = 2;
+}
+
+message NotificationAct {
+  string key = 1;
+  oneof act {
+    uint32 action_index = 2;
+    Reply reply = 3;
+    bool dismiss = 4;
+  }
+}
+
+message Reply {
+  uint32 action_index = 1;
+  string text = 2;
+}
+
+message NotificationRemoved {
+  string key = 1;
+}
+
+// Messages. The phone owns the data (SMS/MMS provider, mirrored RCS notifications);
+// the Mac keeps an encrypted cache.
+
+enum MessageKind {
+  MESSAGE_KIND_UNSPECIFIED = 0;
+  SMS = 1;                          // SMS or MMS from the telephony provider
+  RCS = 2;                          // mirrored from a messaging app's notifications; recent only
+}
+
+// Mac → phone: send threads and recent messages newer than since_ms (0 = initial sync).
+message SmsSyncRequest {
+  int64 since_ms = 1;
+  uint32 max_threads = 2;
+  uint32 messages_per_thread = 3;
+}
+
+// Mac → phone: older messages of one thread.
+message SmsHistoryRequest {
+  string thread_id = 1;
+  int64 before_ms = 2;
+  uint32 limit = 3;
+}
+
+message SmsThread {
+  string id = 1;                    // "sms:<provider thread id>" or "rcs:<conversation key>"
+  repeated string addresses = 2;
+  repeated string names = 3;        // contact names, parallel to addresses ("" if unknown)
+  string snippet = 4;
+  int64 last_ms = 5;
+  MessageKind kind = 6;
+  bool can_reply = 7;               // false for group SMS/MMS and RCS threads without a live notification
+  string title = 8;                 // conversation title for RCS / group threads
+}
+
+message SmsThreadList {
+  repeated SmsThread threads = 1;
+}
+
+message SmsMessage {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    RECEIVED = 1;
+    SENT = 2;
+    SENDING = 3;
+    FAILED = 4;
+  }
+  string id = 1;                    // "sms:<id>", "mms:<id>" or "rcs:<hash>"
+  string thread_id = 2;
+  string address = 3;               // sender for incoming messages
+  string sender_name = 4;
+  string body = 5;
+  int64 ts_ms = 6;
+  bool outgoing = 7;
+  int32 sub_id = 8;
+  Status status = 9;
+  bool has_media = 10;              // MMS/RCS attachment; shown as a placeholder on the Mac
+  MessageKind kind = 11;
+}
+
+message SmsMessageList {
+  repeated SmsMessage messages = 1;
+  bool history = 2;                 // answer to SmsHistoryRequest
+}
+
+// Phone camera on the Mac. The video itself travels on a VIDEO stream (brege-core video.rs).
+enum CameraFacing {
+  CAMERA_FACING_UNSPECIFIED = 0;
+  BACK = 1;
+  FRONT = 2;
+}
+
+// Mac → phone: start, change or stop the camera.
+message CameraRequest {
+  bool start = 1;                   // false = stop
+  CameraFacing facing = 2;
+  bool torch = 3;
+  bool audio = 4;                   // also send the microphone (for recording), as mic datagrams
+}
+
+// Phone → Mac.
+message CameraState {
+  bool active = 1;
+  string codec = 2;                 // "h264" or "h265"
+  uint32 width = 3;                 // encoded size, before rotation
+  uint32 height = 4;
+  uint32 rotation = 5;              // degrees clockwise to show the picture upright
+  CameraFacing facing = 6;
+  bool torch = 7;
+  bool torch_available = 8;
+  string detail = 9;                // why the camera is not active, e.g. "tap the notification"
+}
+
+// Recent photos and screenshots. Mac → phone: the newest items, with thumbnails.
+message RecentMediaRequest {
+  uint32 limit = 1;                 // ≤ 12
+}
+
+// Phone → Mac: an answer, or a push when a screenshot was just taken (new_screenshot).
+message RecentMediaList {
+  repeated MediaItem items = 1;
+  bool new_screenshot = 2;
+  bool permission_needed = 3;       // the phone app has no photo access yet
+}
+
+message MediaItem {
+  string id = 1;                    // MediaStore id
+  string name = 2;
+  int64 taken_ms = 3;
+  bool screenshot = 4;
+  string mime = 5;
+  bytes thumbnail_jpeg = 6;         // ≤ 64 KB
+}
+
+// Mac → phone: send the full file; answered with CaptureResult (same request id) and a transfer.
+message MediaFetchRequest {
+  string request_id = 1;
+  string media_id = 2;
+}
+
+// Ongoing activities: phone notifications worth showing on the Mac (timers, navigation,
+// deliveries, Android 16 Live Updates). Phone → Mac; actions use NotificationAct with the same key.
+message OngoingActivity {
+  string key = 1;
+  string package = 2;
+  string app_label = 3;
+  string title = 4;
+  string text = 5;
+  string short_text = 6;            // compact chip text (Notification short critical text)
+  int32 progress = 7;
+  int32 progress_max = 8;           // 0 = no progress bar
+  bool indeterminate = 9;
+  int64 chronometer_base_ms = 10;   // epoch ms of the timer's reference point; 0 = none
+  bool counts_down = 11;
+  bytes icon_png = 12;              // app icon, only in the first update for a key (≤ 32 KB)
+  repeated NotificationAction actions = 13;
+  int64 updated_ms = 14;
+}
+
+message OngoingActivityEnded {
+  string key = 1;
+}
+
+// Import from phone. Mac → phone: take a photo or scan a document for the Mac.
+message CaptureRequest {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    PHOTO = 1;
+    DOCUMENT = 2;
+  }
+  string request_id = 1;            // hex, chosen by the Mac
+  Kind kind = 2;
+}
+
+// Phone → Mac. The file itself travels as a normal transfer (transfer_id).
+message CaptureResult {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    SENDING = 1;
+    CANCELLED = 2;
+    FAILED = 3;
+  }
+  string request_id = 1;
+  Status status = 2;
+  string transfer_id = 3;
+  string detail = 4;
+}
+
+// Phone screen. Mac → phone: the launchable apps, for the app launcher.
+message AppListRequest {}
+
+// Phone → Mac.
+message AppList {
+  repeated PhoneApp apps = 1;       // ≤ 500
+}
+
+message PhoneApp {
+  string package = 1;
+  string label = 2;
+  bytes icon_png = 3;               // ≤ 32 KB
+}
+
+// Mac → phone: contact photos for the addresses shown in the Messages window.
+message ContactPhotoRequest {
+  repeated string addresses = 1;    // ≤ 50 per request
+}
+
+// Phone → Mac. An empty photo means the contact has none.
+message ContactPhoto {
+  string address = 1;
+  bytes jpeg = 2;                   // ≤ 64 KB thumbnail
+}
+
+message ContactPhotoList {
+  repeated ContactPhoto photos = 1;
+}
+
+// Mac → phone.
+message SmsSend {
+  string client_id = 1;
+  string thread_id = 2;
+  string address = 3;               // single recipient; group sending is not supported in v1
+  string body = 4;
+  int32 sub_id = 5;                 // -1 = phone default
+}
+
+// Phone → Mac.
+message SmsSendStatus {
+  string client_id = 1;
+  SmsMessage.Status status = 2;
+  string error = 3;
+}
+
+message Sim {
+  int32 sub_id = 1;
+  string label = 2;
+  int32 slot = 3;
+}
+
+message SimList {
+  repeated Sim sims = 1;
+}
+
+// Calls: control only; call audio stays on the phone.
+message CallState {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    RINGING = 1;
+    DIALING = 2;
+    ACTIVE = 3;
+    ENDED = 4;
+  }
+  string call_id = 1;
+  State state = 2;
+  string number = 3;
+  string contact_name = 4;
+  bool incoming = 5;
+  int64 started_ms = 6;
+}
+
+// Mac → phone.
+message CallAction {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    ANSWER = 1;
+    DECLINE = 2;
+    HANG_UP = 3;
+    DIAL = 4;
+  }
+  Kind kind = 1;
+  string number = 2;                // DIAL only
+  int32 sub_id = 3;                 // DIAL only; -1 = phone default
+}
+
+// File transfer: offer on the control stream; bytes flow on a FILE stream.
+message TransferOffer {
+  string id = 1;                    // random 16-byte hex
+  string name = 2;
+  uint64 size = 3;
+  string mime = 4;
+  bytes root_hash = 5;              // 32-byte BLAKE3 root over chunk hashes
+  uint32 chunk_size = 6;
+}
+
+message TransferAccept {
+  string id = 1;
+  repeated uint32 have_chunks = 2;  // chunk indices already verified by receiver
+}
+
+message TransferCancel {
+  string id = 1;
+  string reason = 2;
+}
+
+// Phone status
+message StatusUpdate {
+  uint32 battery_pct = 1;
+  bool charging = 2;
+  uint32 signal_bars = 3;           // 0–4
+  string network_type = 4;          // "5G", "LTE", "WIFI", …
+  bool dnd = 5;
+  uint32 volume_pct = 6;
+}
+
+message MediaState {
+  string app_label = 1;
+  string title = 2;
+  string artist = 3;
+  bool playing = 4;
+  int64 position_ms = 5;
+  int64 duration_ms = 6;
+}
+
+// Open on the other device: a link, text or file
+message OpenActivity {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    URL = 1;
+    TEXT = 2;
+    FILE = 3;                       // content_ref = TransferOffer.id
+  }
+  Kind kind = 1;
+  string content = 2;
+  string title = 3;
+  string app_hint = 4;
+}
+
+message Command {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    RING = 1;
+    STOP_RING = 2;
+    MEDIA_PLAY_PAUSE = 3;
+    MEDIA_NEXT = 4;
+    MEDIA_PREVIOUS = 5;
+    MIC_START = 6;                  // Mac asks the phone to act as its microphone
+    MIC_STOP = 7;
+    ENABLE_WIRELESS_DEBUGGING = 8;  // phone screen; needs WRITE_SECURE_SETTINGS granted over adb
+  }
+  Kind kind = 1;
+}
+
+// Phone as microphone. Audio travels as QUIC datagrams:
+//   [u8 AUDIO_KIND_MIC = 1][u32 LE sequence][PCM: signed 16-bit little-endian, mono, sample_rate]
+message MicState {
+  bool active = 1;
+  uint32 sample_rate = 2;
+  // Why the microphone is not active, e.g. "tap the notification on your phone".
+  string detail = 3;
+}
+
+// Phone folders
+message FsChanged {
+  string root_id = 1;
+  string path = 2;
+}
+
+// Phone folders in Finder. Each request uses its own FS stream:
+//   Mac → phone: StreamType FS, length-delimited FsRequest, then (write only) raw file bytes, finish.
+//   Phone → Mac: length-delimited FsResponse, then (read only) `length` raw bytes, finish.
+// Paths are absolute, "/" separated; the first component is a folder the user shared on the phone.
+message FsRequest {
+  string path = 1;
+  oneof op {
+    FsList list = 2;
+    FsStat stat = 3;
+    FsRead read = 4;
+    FsWrite write = 5;
+    FsMkdir mkdir = 6;
+    FsDelete delete = 7;
+    FsRename rename = 8;
+  }
+}
+
+message FsList {}
+message FsStat {}
+message FsRead {
+  uint64 offset = 1;
+  uint64 length = 2;
+}
+message FsWrite {
+  bool truncate = 1;                // replace the whole file (the only mode WebDAV PUT needs)
+}
+message FsMkdir {}
+message FsDelete {}
+message FsRename {
+  string to = 1;
+}
+
+message FsEntry {
+  string name = 1;
+  bool dir = 2;
+  uint64 size = 3;
+  int64 modified_ms = 4;
+  string mime = 5;
+}
+
+message FsResponse {
+  enum Error {
+    OK = 0;
+    NOT_FOUND = 1;
+    FORBIDDEN = 2;
+    EXISTS = 3;
+    IO = 4;
+    UNAVAILABLE = 5;              // no folders shared, or phone storage not accessible
+    INVALID = 6;
+  }
+  Error error = 1;
+  string message = 2;
+  repeated FsEntry entries = 3;   // list
+  FsEntry entry = 4;              // stat, write, mkdir
+  uint64 length = 5;              // read: number of raw bytes that follow
+}
+
+// Header written at the start of a FILE stream, after the StreamType varint.
+message FileStreamHeader {
+  string transfer_id = 1;
+}

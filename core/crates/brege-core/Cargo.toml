@@ -1,0 +1,24 @@
+[package]
+name = "brege-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+brege-features = { version = "1.0.0-beta.1", path = "../brege-features" }
+brege-identity = { version = "1.0.0-beta.1", path = "../brege-identity" }
+brege-proto = { version = "1.0.0-beta.1", path = "../brege-proto" }
+brege-store = { version = "1.0.0-beta.1", path = "../brege-store" }
+brege-transfer = { version = "1.0.0-beta.1", path = "../brege-transfer" }
+brege-transport = { version = "1.0.0-beta.1", path = "../brege-transport" }
+bytes = "1.12.1"
+prost = "0.14"
+ring = "0.17"
+thiserror = "2.0.20"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "io-util"] }
+tokio-util = "0.7"
+tracing = "0.1.44"
+
+[dev-dependencies]
+tempfile = "3.27.0"

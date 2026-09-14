@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>app.brege.mac</string>
+    <key>CFBundleName</key>
+    <string>Brêge</string>
+    <key>CFBundleDisplayName</key>
+    <string>Brêge</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleExecutable</key>
+    <string>Brege</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0 beta</string>
+    <key>CFBundleVersion</key>
+    <string>2</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Brêge</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Brêge connects directly to your paired Android phone on this network.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_brege._udp</string>
+    </array>
+    <key>NSLocationUsageDescription</key>
+    <string>Brêge reads the name of the Wi‑Fi network to know when this Mac has joined your phone's hotspot, and to name the network when it asks whether to use Brêge there.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Brêge reads the name of the Wi‑Fi network to know when this Mac has joined your phone's hotspot, and to name the network when it asks whether to use Brêge there.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Brêge uses Bluetooth so your phone can find and reconnect to this Mac.</string>
+    <!-- Import from phone: Services menu entries (PhoneCapture.swift). -->
+    <!-- Relay entries, only offered to the Brêge Phones helper (NSRequiredContext). The Services
+         menu shows one entry per phone, which Brêge writes into ~/Library/Services from the
+         BregeServices templates below; macOS delivers those to the helper, which passes the
+         request and the phone's id on through these (ServicesMenu.swift). -->
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Brêge Relay Take Photo</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>takePhotoWithPhone</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSSendTypes</key>
+            <array>
+                <string>app.brege.service-device</string>
+            </array>
+            <key>NSReturnTypes</key>
+            <array>
+                <string>public.jpeg</string>
+                <string>public.tiff</string>
+                <string>NSTIFFPboardType</string>
+                <string>public.file-url</string>
+                <string>NSFilenamesPboardType</string>
+                <string>app.brege.service-error</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict>
+                <key>NSApplicationIdentifier</key>
+                <string>app.brege.mac.phone-services</string>
+            </dict>
+            <key>NSTimeout</key>
+            <string>200000</string>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Brêge Relay Scan Document</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>scanDocumentWithPhone</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSSendTypes</key>
+            <array>
+                <string>app.brege.service-device</string>
+            </array>
+            <key>NSReturnTypes</key>
+            <array>
+                <string>com.adobe.pdf</string>
+                <string>public.jpeg</string>
+                <string>public.tiff</string>
+                <string>NSTIFFPboardType</string>
+                <string>public.file-url</string>
+                <string>NSFilenamesPboardType</string>
+                <string>app.brege.service-error</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict>
+                <key>NSApplicationIdentifier</key>
+                <string>app.brege.mac.phone-services</string>
+            </dict>
+            <key>NSTimeout</key>
+            <string>200000</string>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Brêge Relay Take Photo into Folder</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>takePhotoWithPhoneIntoFolder</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSSendTypes</key>
+            <array>
+                <string>app.brege.service-device</string>
+                <string>public.file-url</string>
+            </array>
+            <key>NSReturnTypes</key>
+            <array>
+                <string>app.brege.service-error</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict>
+                <key>NSApplicationIdentifier</key>
+                <string>app.brege.mac.phone-services</string>
+            </dict>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Brêge Relay Scan Document into Folder</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>scanDocumentWithPhoneIntoFolder</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSSendTypes</key>
+            <array>
+                <string>app.brege.service-device</string>
+                <string>public.file-url</string>
+            </array>
+            <key>NSReturnTypes</key>
+            <array>
+                <string>app.brege.service-error</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict>
+                <key>NSApplicationIdentifier</key>
+                <string>app.brege.mac.phone-services</string>
+            </dict>
+        </dict>
+    </array>
+    <!-- Services menu templates: "Phone" becomes the phone's name; ServicesMenu.swift fills in the
+         helper's port and the phone's id. -->
+    <key>BregeServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Take Photo with Phone</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>takePhotoWithPhone</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSReturnTypes</key>
+            <array>
+                <string>public.jpeg</string>
+                <string>public.tiff</string>
+                <string>NSTIFFPboardType</string>
+                <string>public.file-url</string>
+                <string>NSFilenamesPboardType</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSTimeout</key>
+            <string>200000</string>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Scan Document with Phone</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>scanDocumentWithPhone</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSReturnTypes</key>
+            <array>
+                <string>com.adobe.pdf</string>
+                <string>public.jpeg</string>
+                <string>public.tiff</string>
+                <string>NSTIFFPboardType</string>
+                <string>public.file-url</string>
+                <string>NSFilenamesPboardType</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSTimeout</key>
+            <string>200000</string>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Take Photo with Phone into Folder</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>takePhotoWithPhoneIntoFolder</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.folder</string>
+                <string>public.item</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Scan Document with Phone into Folder</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>scanDocumentWithPhoneIntoFolder</string>
+            <key>NSPortName</key>
+            <string>Brêge</string>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.folder</string>
+                <string>public.item</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+        </dict>
+    </array>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Brêge reads the current browser tab when you send it to your phone.</string>
+</dict>
+</plist>

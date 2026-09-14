@@ -1,0 +1,20 @@
+[package]
+name = "brege-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+brege-identity = { version = "1.0.0-beta.1", path = "../brege-identity" }
+brege-proto = { version = "1.0.0-beta.1", path = "../brege-proto" }
+bytes = "1.12.1"
+prost = "0.14"
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls", "ring", "log"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging"] }
+thiserror = "2.0.20"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
+tracing = "0.1.44"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
