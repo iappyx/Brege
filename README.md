@@ -1,4 +1,8 @@
-# Brêge
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Brêge app icon">
+</p>
+
+<h1 align="center">Brêge</h1>
 
 **Brêge** (Frisian for *bridge*) connects an Android phone to a Mac: messages and calls, notifications, the clipboard, files, the phone's screen, its camera and
 microphone, and more — directly over your own network, without an account or a cloud service.
