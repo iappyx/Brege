@@ -66,9 +66,8 @@ class BregeService : LifecycleService() {
         )
         lifecycleScope.launch {
             val node = Core.ensureStarted() ?: return@launch
-            startDiscovery()
             // Discovery restarts only when the reported interfaces really changed.
-            NetworkPaths.onChanged = { discovery?.restart() }
+            NetworkPaths.onChanged = { restartDiscovery() }
             watchNetwork()
             watchBattery()
             watchBluetooth()
@@ -85,6 +84,9 @@ class BregeService : LifecycleService() {
                 }
                 updateNotification(text)
                 if (connected.isNotEmpty()) sendBattery()
+                // Look for Macs only while one is not connected: a running search keeps the Wi‑Fi
+                // multicast filter off, so every mDNS packet on the network would wake the phone.
+                if (devices.any { !it.connected }) startDiscovery() else stopDiscovery()
             }
         }
     }
@@ -115,8 +117,7 @@ class BregeService : LifecycleService() {
         MessageSync.stopObserving()
         CallMonitor.stop()
         RecentMedia.stopWatching(this)
-        discovery?.stop()
-        multicastLock?.let { if (it.isHeld) it.release() }
+        stopDiscovery()
         networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
         allNetworksCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
         tetherReceiver?.let { unregisterReceiver(it) }
@@ -131,13 +132,29 @@ class BregeService : LifecycleService() {
         stopSelf()
     }
 
+    /** Searches for Macs and holds the multicast lock for as long as the search runs. */
+    @Synchronized
     private fun startDiscovery() {
+        if (discovery != null) return
         multicastLock = getSystemService(WifiManager::class.java)
             .createMulticastLock("brege-discovery")
             .apply { setReferenceCounted(false); acquire() }
         discovery = NsdDiscovery(this) { tokens, address ->
             runCatching { Core.node?.addressDiscovered(tokens, address) }
         }.also { it.start() }
+    }
+
+    @Synchronized
+    private fun stopDiscovery() {
+        discovery?.stop()
+        discovery = null
+        multicastLock?.let { if (it.isHeld) it.release() }
+        multicastLock = null
+    }
+
+    @Synchronized
+    private fun restartDiscovery() {
+        discovery?.restart()
     }
 
     private fun watchNetwork() {

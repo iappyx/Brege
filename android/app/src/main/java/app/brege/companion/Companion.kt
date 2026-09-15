@@ -211,6 +211,7 @@ class BleWakeReceiver : BroadcastReceiver() {
             BleWake.onScanLost(retryNow = false)
             return
         }
-        BregeService.start(context, "BLE wake")
+        // Every sighting of the Mac is delivered; only a stopped service needs starting.
+        if (!BregeService.isRunning) BregeService.start(context, "BLE wake")
     }
 }
