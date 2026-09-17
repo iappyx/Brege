@@ -4,8 +4,8 @@
 
 <h1 align="center">Brêge</h1>
 
-**Brêge** (Frisian for *bridge*) connects an Android phone to a Mac: messages and calls, notifications, the clipboard, files, the phone's screen, its camera and
-microphone, and more — directly over your own network, without an account or a cloud service.
+**Brêge** (Frisian for *bridge*) connects an Android phone to a Mac: messages and calls, notifications, the clipboard, files, photos, the phone's screen, camera and
+microphone, and its everyday settings — directly over your own network, without an account or a cloud service.
 
 A menu bar app on the Mac, a companion app on the phone, and a shared Rust core that does the
 networking, pairing and encryption.
@@ -25,6 +25,8 @@ networking, pairing and encryption.
 - Read and send SMS, and reply to RCS conversations, in a Messages window with contact photos.
 - Incoming calls on the Mac with answer and decline; start calls from the Mac; missed calls with
   Call Back and Message.
+- Recent calls in their own window, and a keypad for numbers that are not in your contacts. Dialing
+  always takes a deliberate step and a confirmation.
 - Optionally pause music on the Mac while the phone rings or is on a call.
 
 **Notifications**
@@ -32,6 +34,8 @@ networking, pairing and encryption.
 - Verification codes are recognised and offered as Copy Code (optionally copied automatically).
 - Ongoing phone activities (timers, navigation, deliveries) in the menu bar.
 - Battery alerts for the phone.
+- Search the notifications Brêge has seen: a week of them, kept on the Mac.
+- Decide per app, and per category within an app, what may interrupt you.
 
 **Clipboard, links and files**
 - Shared clipboard in both directions.
@@ -39,6 +43,8 @@ networking, pairing and encryption.
 - Send files both ways: drop them on a phone in the menu, or share to Brêge on the phone.
 - Phone folders you choose appear in Finder as a volume.
 - Recent photos and screenshots from the phone in the menu: drag one into any app.
+- The whole photo library in a window: every album, videos included, drag anything straight into
+  what you are working on.
 - Take a photo or scan a document with the phone straight into the app you are working in
   (right-click › Services, per phone).
 
@@ -48,6 +54,13 @@ networking, pairing and encryption.
 - Use the phone's camera in a window on the Mac, and record video with sound.
 - Use the phone as a microphone for any Mac app ("Brêge Microphone").
 - Media controls for music on the phone; ring the phone to find it.
+
+**Controls and housekeeping**
+- Phone controls in the menu: torch (with brightness), silent or vibrate, the volume sliders, Do Not
+  Disturb, a buzz to find the phone, and clear all notifications — with storage, battery detail and
+  the next alarm at a glance.
+- Every installed app with its size, version and how long since you last used it. Ask the phone to
+  uninstall one or open its settings; the phone always confirms.
 
 **Around the edges**
 - Several phones at once, each with its own windows and menu entries.
@@ -95,9 +108,9 @@ Brêge has no server, no account and no analytics. Phone and Mac talk to each ot
   their identity. Two things come before that: on a network Brêge may use, the TLS handshake shows a
   device's public key to anyone who connects there, and while you pair, the pairing exchange (device
   names and a proof of the QR code's one-time token) runs before the keys are pinned.
-- **Stored data** on the Mac (message cache, notification history, known networks) is in an
-  encrypted database. The recent-photo cache and notification icons are ordinary files in the app's
-  cache and temporary folders.
+- **Stored data** on the Mac (message and call cache, notification history, known networks) is in an
+  encrypted database. Photo thumbnails and notification icons are ordinary files in the app's cache
+  and temporary folders; the photo cache prunes itself.
 - **Brêge stays silent on networks you have not chosen.** On a network or VPN it does not know, it
   does not announce itself and does not try to connect. Packets from such networks are dropped at
   the socket before the connection layer sees them, so no reply of any kind goes out and the port
@@ -168,6 +181,10 @@ then asks for Keychain access again after each rebuild.
    - **Phone hotspot:** choose the phone's hotspot network in Settings › Phones.
    - **Microphone:** click Microphone on the phone in the menu; Brêge installs its audio device once.
    - **Wi‑Fi names on the phone:** "Show Wi‑Fi names" in the phone app's Networks card.
+   - **Do Not Disturb from the Mac:** allow Brêge under Settings › Apps › Special app access ›
+     Do Not Disturb access.
+   - **App sizes and last use:** allow Brêge under Settings › Apps › Special app access › Usage
+     access. Both screens can be opened from the Mac, which sends the phone a notification to tap.
 
 ## Project layout
 
@@ -182,7 +199,7 @@ docs/      Screenshots
 ## Status
 
 Brêge is a personal project under active development and is not published in any app store. It is
-tested on a Mac with macOS 26 and on a Pixel phone and an Android tablet.
+tested on a Mac with macOS 26 and 27 and on a Pixel phone and an Android tablet.
 Paused or not planned: an Android desktop mode window, a system camera extension for the Mac (needs
 a paid Apple developer account), and speakerphone control from the Mac.
 
