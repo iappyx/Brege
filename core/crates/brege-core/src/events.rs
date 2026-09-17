@@ -115,9 +115,19 @@ pub enum Event {
         from: DeviceId,
         call: proto::CallState,
     },
+    /// Cached recent calls changed; `new_missed` counts newly arrived missed calls.
+    CallLogUpdated {
+        from: DeviceId,
+        new_missed: u32,
+    },
     MicStateChanged {
         from: DeviceId,
         state: proto::MicState,
+    },
+    /// Mac side: the phone's torch, sound and Do Not Disturb state.
+    PhoneControlStateChanged {
+        from: DeviceId,
+        state: proto::PhoneControlState,
     },
     CameraRequested {
         from: DeviceId,
@@ -136,6 +146,56 @@ pub enum Event {
     RecentMediaRequested {
         from: DeviceId,
         limit: u32,
+    },
+    /// Mac side: one page of the phone's photo library.
+    MediaLibraryPageReceived {
+        from: DeviceId,
+        page: proto::MediaLibraryPage,
+    },
+    /// Mac side: the albums of the phone's library.
+    MediaAlbumsReceived {
+        from: DeviceId,
+        albums: Vec<proto::MediaAlbum>,
+    },
+    /// Phone side: a Mac asks for a page of the library. Already clamped.
+    MediaLibraryRequested {
+        from: DeviceId,
+        request: proto::MediaLibraryRequest,
+    },
+    /// Phone side: a Mac asks for the albums.
+    MediaAlbumsRequested {
+        from: DeviceId,
+        include_videos: bool,
+    },
+    /// Mac side: the phone's installed apps.
+    AppInventoryReceived {
+        from: DeviceId,
+        inventory: proto::AppInventory,
+    },
+    /// Mac side: the notification settings of one app on the phone.
+    NotificationSettingsReceived {
+        from: DeviceId,
+        settings: proto::NotificationSettings,
+    },
+    /// Phone side: a Mac asks for the installed apps.
+    AppInventoryRequested {
+        from: DeviceId,
+        include_system: bool,
+    },
+    /// Phone side: a Mac asks to uninstall an app or open its settings.
+    AppActionRequested {
+        from: DeviceId,
+        action: proto::AppAction,
+    },
+    /// Phone side: a Mac asks for an app's notification settings.
+    NotificationSettingsRequested {
+        from: DeviceId,
+        package: String,
+    },
+    /// Phone side: a Mac changes one notification channel.
+    NotificationChannelUpdateRequested {
+        from: DeviceId,
+        update: proto::NotificationChannelUpdate,
     },
     /// Already validated media id; answer with a capture result.
     MediaFetchRequested {
@@ -196,6 +256,15 @@ pub enum Event {
     CallActionRequested {
         from: DeviceId,
         action: proto::CallAction,
+    },
+    CallLogRequested {
+        from: DeviceId,
+        request: proto::CallLogRequest,
+    },
+    /// Phone side: already validated and clamped.
+    PhoneControlRequested {
+        from: DeviceId,
+        control: proto::PhoneControl,
     },
 }
 

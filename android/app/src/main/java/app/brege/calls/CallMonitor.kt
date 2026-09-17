@@ -32,6 +32,8 @@ object CallMonitor {
     private const val TAG = "BregeCalls"
 
     private lateinit var app: Context
+    /** One instance, so its contact-name cache is actually used. */
+    private val repo by lazy { SmsRepository(app) }
     private var telephonyCallback: Any? = null
     private var phoneStateListener: PhoneStateListener? = null
     private var numberReceiver: BroadcastReceiver? = null
@@ -111,13 +113,15 @@ object CallMonitor {
         } ?: return
         current = if (call.status == CallStatus.ENDED) null else call
         publish(call)
+        // The call log gets its row a moment later; send it so the Mac's list stays current.
+        if (call.status == CallStatus.ENDED) CallLogSync.onCallEnded()
     }
 
     private fun newCall(incoming: Boolean, status: CallStatus, number: String?, now: Long) = CallData(
         callId = UUID.randomUUID().toString(),
         status = status,
         number = number.orEmpty(),
-        contactName = number?.let { SmsRepository(app).contactName(it) }.orEmpty(),
+        contactName = number?.let { repo.contactName(it) }.orEmpty(),
         incoming = incoming,
         startedMs = now,
     )
@@ -125,7 +129,7 @@ object CallMonitor {
     private fun updateNumber(number: String) {
         val call = current ?: return
         if (call.number == number) return
-        val updated = call.copy(number = number, contactName = SmsRepository(app).contactName(number))
+        val updated = call.copy(number = number, contactName = repo.contactName(number))
         current = updated
         publish(updated)
     }

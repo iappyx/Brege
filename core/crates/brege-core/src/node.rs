@@ -574,6 +574,66 @@ impl Node {
         }
     }
 
+    /// Mac side: asks for one page of the photo library; `before_ms` 0 starts at the newest.
+    pub fn request_media_library(
+        &self,
+        phone: DeviceId,
+        before_ms: i64,
+        limit: u32,
+        album: &str,
+        include_videos: bool,
+    ) -> Result<()> {
+        self.inner.send_to(
+            &phone,
+            Payload::MediaLibraryRequest(proto::MediaLibraryRequest {
+                before_ms,
+                limit: limit.clamp(1, crate::apps::MAX_LIBRARY_ITEMS as u32),
+                album: album.to_string(),
+                include_videos,
+            }),
+        )
+    }
+
+    /// Mac side: asks for the albums of the library.
+    pub fn request_media_albums(&self, phone: DeviceId, include_videos: bool) -> Result<()> {
+        self.inner.send_to(
+            &phone,
+            Payload::MediaAlbumsRequest(proto::MediaAlbumsRequest { include_videos }),
+        )
+    }
+
+    /// Phone side: answers one Mac with a page of the library.
+    pub fn send_media_library_page(
+        &self,
+        mac: DeviceId,
+        items: Vec<proto::MediaItem>,
+        end: bool,
+        album: &str,
+        permission_needed: bool,
+        partial_access: bool,
+    ) -> Result<()> {
+        self.inner.send_to(
+            &mac,
+            Payload::MediaLibraryPage(proto::MediaLibraryPage {
+                items: crate::apps::sanitize_media_items(items, crate::apps::MAX_LIBRARY_ITEMS),
+                end,
+                album: album.to_string(),
+                permission_needed,
+                partial_access,
+            }),
+        )
+    }
+
+    /// Phone side: answers one Mac with the albums.
+    pub fn send_media_albums(&self, mac: DeviceId, albums: Vec<proto::MediaAlbum>) -> Result<()> {
+        self.inner.send_to(
+            &mac,
+            Payload::MediaAlbums(proto::MediaAlbums {
+                albums: crate::apps::sanitize_albums(albums),
+            }),
+        )
+    }
+
     /// Mac side: asks for the full file of a media item; returns the request id that the
     /// phone's capture result refers to.
     pub fn request_media(&self, phone: DeviceId, media_id: &str) -> Result<String> {
@@ -789,6 +849,170 @@ impl Node {
         self.inner.send_to(&phone, Payload::CallAction(action))
     }
 
+    /// Cached recent calls, newest first.
+    pub fn recent_calls(
+        &self,
+        phone: DeviceId,
+        limit: u32,
+    ) -> Result<Vec<brege_store::CallRecord>> {
+        Ok(self.inner.store.lock().unwrap().calls(&phone, limit)?)
+    }
+
+    /// Asks the phone for recent calls newer than what the cache holds.
+    pub fn request_call_log(&self, phone: DeviceId, limit: u32) -> Result<()> {
+        let since_ms = self
+            .inner
+            .store
+            .lock()
+            .unwrap()
+            .newest_call_ms(&phone)?
+            .unwrap_or(0);
+        self.inner.send_to(
+            &phone,
+            Payload::CallLogRequest(proto::CallLogRequest {
+                since_ms,
+                before_ms: 0,
+                limit,
+            }),
+        )
+    }
+
+    /// Asks the phone for calls older than the oldest cached one.
+    pub fn request_older_calls(&self, phone: DeviceId, limit: u32) -> Result<()> {
+        let before_ms = self
+            .inner
+            .store
+            .lock()
+            .unwrap()
+            .oldest_call_ms(&phone)?
+            .unwrap_or(0);
+        self.inner.send_to(
+            &phone,
+            Payload::CallLogRequest(proto::CallLogRequest {
+                since_ms: 0,
+                before_ms,
+                limit,
+            }),
+        )
+    }
+
+    // --- installed apps and notification settings ----------------------------------------------
+
+    /// Mac side: asks the phone for its installed apps.
+    pub fn request_app_inventory(&self, phone: DeviceId, include_system: bool) -> Result<()> {
+        self.inner.send_to(
+            &phone,
+            Payload::AppInventoryRequest(proto::AppInventoryRequest { include_system }),
+        )
+    }
+
+    /// Mac side: uninstall an app or open one of its settings pages. The phone asks the user.
+    pub fn send_app_action(
+        &self,
+        phone: DeviceId,
+        kind: proto::app_action::Kind,
+        package: &str,
+    ) -> Result<()> {
+        if !crate::apps::valid_package(package) {
+            return Err(CoreError::InvalidInput("package".into()));
+        }
+        self.inner.send_to(
+            &phone,
+            Payload::AppAction(proto::AppAction {
+                kind: kind as i32,
+                package: package.to_string(),
+            }),
+        )
+    }
+
+    /// Mac side: asks for one app's notification settings.
+    pub fn request_notification_settings(&self, phone: DeviceId, package: &str) -> Result<()> {
+        if !crate::apps::valid_package(package) {
+            return Err(CoreError::InvalidInput("package".into()));
+        }
+        self.inner.send_to(
+            &phone,
+            Payload::NotificationSettingsRequest(proto::NotificationSettingsRequest {
+                package: package.to_string(),
+            }),
+        )
+    }
+
+    /// Mac side: changes how loud one notification channel of an app is.
+    pub fn update_notification_channel(
+        &self,
+        phone: DeviceId,
+        package: &str,
+        channel_id: &str,
+        importance: u32,
+    ) -> Result<()> {
+        if !crate::apps::valid_package(package) || channel_id.is_empty() {
+            return Err(CoreError::InvalidInput("channel".into()));
+        }
+        self.inner.send_to(
+            &phone,
+            Payload::NotificationChannelUpdate(proto::NotificationChannelUpdate {
+                package: package.to_string(),
+                channel_id: channel_id.to_string(),
+                importance: importance.min(5),
+            }),
+        )
+    }
+
+    /// Phone side: answers with the installed apps.
+    pub fn send_app_inventory(
+        &self,
+        mac: DeviceId,
+        apps: Vec<proto::InstalledApp>,
+        usage_access: bool,
+    ) -> Result<()> {
+        self.inner.send_to(
+            &mac,
+            Payload::AppInventory(proto::AppInventory {
+                apps: apps.into_iter().take(crate::apps::MAX_APPS).collect(),
+                usage_access,
+            }),
+        )
+    }
+
+    /// Phone side: answers with one app's notification settings.
+    pub fn send_notification_settings(
+        &self,
+        mac: DeviceId,
+        settings: proto::NotificationSettings,
+    ) -> Result<()> {
+        self.inner
+            .send_to(&mac, Payload::NotificationSettings(settings))
+    }
+
+    /// Mac side: cached notifications whose app, title or text contain `query`.
+    pub fn search_notifications(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<brege_store::NotificationRecord>> {
+        Ok(self
+            .inner
+            .store
+            .lock()
+            .unwrap()
+            .search_notifications(query, limit)?)
+    }
+
+    // --- phone controls ------------------------------------------------------------------------
+
+    /// Mac side: asks the phone to change a control (torch, sound, Do Not Disturb).
+    pub fn send_phone_control(&self, phone: DeviceId, control: proto::PhoneControl) -> Result<()> {
+        let control = brege_features::controls::validate(&control)
+            .map_err(|e| CoreError::InvalidInput(e.to_string()))?;
+        self.inner.send_to(&phone, Payload::PhoneControl(control))
+    }
+
+    /// Phone side: tells the Macs where the controls stand.
+    pub fn publish_control_state(&self, state: proto::PhoneControlState) -> usize {
+        self.inner.broadcast(Payload::PhoneControlState(state))
+    }
+
     // --- messages and calls, phone side -----------------------------------------------------
 
     pub async fn publish_message_threads(&self, threads: Vec<proto::SmsThread>) -> usize {
@@ -810,6 +1034,28 @@ impl Node {
 
     pub fn publish_call_state(&self, call: proto::CallState) -> usize {
         self.inner.broadcast(Payload::CallState(call))
+    }
+
+    /// Phone side: sends recent calls to the Macs. `history` marks an answer to a paging request.
+    pub fn publish_call_log(&self, entries: Vec<proto::CallLogEntry>, history: bool) -> usize {
+        if entries.is_empty() {
+            return 0;
+        }
+        self.inner
+            .broadcast(Payload::CallLog(proto::CallLogList { entries, history }))
+    }
+
+    /// Phone side: answers one Mac's request for recent calls.
+    pub fn send_call_log(
+        &self,
+        mac: DeviceId,
+        entries: Vec<proto::CallLogEntry>,
+        history: bool,
+    ) -> Result<()> {
+        self.inner.send_to(
+            &mac,
+            Payload::CallLog(proto::CallLogList { entries, history }),
+        )
     }
 
     // --- phone as microphone -----------------------------------------------------------------

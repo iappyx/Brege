@@ -30,7 +30,7 @@ struct MessagesView: View {
         .onChange(of: model.composeNumber) { number in
             if number != nil { composingNew = true }
         }
-        .sheet(isPresented: $dialing) { DialSheet(sims: model.sims, deviceId: model.deviceId) }
+        .sheet(isPresented: $dialing) { DialSheet(sims: model.sims, deviceId: model.deviceId, names: model.knownNames) }
         .alert("Could not send", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -344,41 +344,6 @@ private struct NewMessageSheet: View {
         }
         .padding()
         .frame(width: 380)
-    }
-}
-
-struct DialSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var app: AppModel
-    let sims: [SimData]
-    let deviceId: String
-    @State private var number = ""
-    @State private var subId: Int32 = -1
-
-    var body: some View {
-        Form {
-            TextField("Phone number", text: $number)
-            if sims.count > 1 {
-                Picker("SIM", selection: $subId) {
-                    Text("Default").tag(Int32(-1))
-                    ForEach(sims, id: \.subId) { sim in Text(sim.label).tag(sim.subId) }
-                }
-            }
-            Text("The call starts on your phone; you talk on the phone.")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                Button("Call") {
-                    app.dial(number: number, subId: subId, deviceId: deviceId)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!number.contains(where: \.isNumber))
-            }
-        }
-        .padding()
-        .frame(width: 340)
     }
 }
 

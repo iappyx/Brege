@@ -501,6 +501,16 @@ pub enum BregeEvent {
         status: MessageStatus,
         error: String,
     },
+    /// Mac side: the phone's controls changed (torch, sound, Do Not Disturb, storage, alarm).
+    PhoneControlsChanged {
+        from: String,
+        state: PhoneControlsData,
+    },
+    /// Recent calls changed in the cache; `new_missed` counts newly arrived missed calls.
+    CallLogUpdated {
+        from: String,
+        new_missed: u32,
+    },
     SimsUpdated {
         from: String,
         sims: Vec<SimData>,
@@ -547,6 +557,67 @@ pub enum BregeEvent {
     RecentMediaRequested {
         from: String,
         limit: u32,
+    },
+    /// Mac: one page of the phone's photo library.
+    MediaLibraryPage {
+        from: String,
+        items: Vec<MediaItemData>,
+        end: bool,
+        album: String,
+        permission_needed: bool,
+        partial_access: bool,
+    },
+    /// Mac: the albums of the phone's library.
+    MediaAlbumsReceived {
+        from: String,
+        albums: Vec<MediaAlbumData>,
+    },
+    /// Phone: a Mac asks for a page of the library.
+    MediaLibraryRequested {
+        from: String,
+        before_ms: i64,
+        limit: u32,
+        album: String,
+        include_videos: bool,
+    },
+    /// Phone: a Mac asks for the albums.
+    MediaAlbumsRequested {
+        from: String,
+        include_videos: bool,
+    },
+    /// Mac: the phone's installed apps.
+    AppInventoryReceived {
+        from: String,
+        apps: Vec<InstalledAppData>,
+        usage_access: bool,
+    },
+    /// Mac: the notification settings of one app on the phone.
+    NotificationSettingsReceived {
+        from: String,
+        settings: NotificationSettingsData,
+    },
+    /// Phone: a Mac asks for the installed apps.
+    AppInventoryRequested {
+        from: String,
+        include_system: bool,
+    },
+    /// Phone: a Mac asks to uninstall an app or open one of its settings pages.
+    AppActionRequested {
+        from: String,
+        kind: AppActionKind,
+        package: String,
+    },
+    /// Phone: a Mac asks for an app's notification settings.
+    NotificationSettingsRequested {
+        from: String,
+        package: String,
+    },
+    /// Phone: a Mac changes one notification category.
+    NotificationChannelUpdateRequested {
+        from: String,
+        package: String,
+        channel_id: String,
+        importance: u32,
     },
     MediaFetchRequested {
         from: String,
@@ -602,6 +673,20 @@ pub enum BregeEvent {
         action: CallActionKind,
         number: String,
         sub_id: i32,
+    },
+    /// Phone side: the Mac asks to change a control. Already validated and clamped.
+    PhoneControlRequested {
+        from: String,
+        kind: ControlKind,
+        value: i32,
+        stream: Option<VolumeStream>,
+    },
+    /// Phone side: a Mac asks for recent calls. `beforeMs` 0 means the newest ones.
+    CallLogRequested {
+        from: String,
+        since_ms: i64,
+        before_ms: i64,
+        limit: u32,
     },
 }
 
@@ -760,6 +845,14 @@ fn convert_event(event: Event) -> Option<BregeEvent> {
             status: MessageStatus::from_proto(status.status),
             error: status.error,
         },
+        Event::PhoneControlStateChanged { from, state } => BregeEvent::PhoneControlsChanged {
+            from: from.to_string(),
+            state: state.into(),
+        },
+        Event::CallLogUpdated { from, new_missed } => BregeEvent::CallLogUpdated {
+            from: from.to_string(),
+            new_missed,
+        },
         Event::SimsUpdated { from, sims } => BregeEvent::SimsUpdated {
             from: from.to_string(),
             sims: sims.into_iter().map(SimData::from).collect(),
@@ -794,6 +887,69 @@ fn convert_event(event: Event) -> Option<BregeEvent> {
                 torch_available: state.torch_available,
                 detail: state.detail,
             },
+        },
+        Event::AppInventoryReceived { from, inventory } => BregeEvent::AppInventoryReceived {
+            from: from.to_string(),
+            apps: inventory.apps.into_iter().map(Into::into).collect(),
+            usage_access: inventory.usage_access,
+        },
+        Event::NotificationSettingsReceived { from, settings } => {
+            BregeEvent::NotificationSettingsReceived {
+                from: from.to_string(),
+                settings: settings.into(),
+            }
+        }
+        Event::AppInventoryRequested {
+            from,
+            include_system,
+        } => BregeEvent::AppInventoryRequested {
+            from: from.to_string(),
+            include_system,
+        },
+        Event::AppActionRequested { from, action } => BregeEvent::AppActionRequested {
+            from: from.to_string(),
+            kind: AppActionKind::from_proto(action.kind)?,
+            package: action.package,
+        },
+        Event::NotificationSettingsRequested { from, package } => {
+            BregeEvent::NotificationSettingsRequested {
+                from: from.to_string(),
+                package,
+            }
+        }
+        Event::NotificationChannelUpdateRequested { from, update } => {
+            BregeEvent::NotificationChannelUpdateRequested {
+                from: from.to_string(),
+                package: update.package,
+                channel_id: update.channel_id,
+                importance: update.importance,
+            }
+        }
+        Event::MediaLibraryPageReceived { from, page } => BregeEvent::MediaLibraryPage {
+            from: from.to_string(),
+            items: page.items.into_iter().map(Into::into).collect(),
+            end: page.end,
+            album: page.album,
+            permission_needed: page.permission_needed,
+            partial_access: page.partial_access,
+        },
+        Event::MediaAlbumsReceived { from, albums } => BregeEvent::MediaAlbumsReceived {
+            from: from.to_string(),
+            albums: albums.into_iter().map(Into::into).collect(),
+        },
+        Event::MediaLibraryRequested { from, request } => BregeEvent::MediaLibraryRequested {
+            from: from.to_string(),
+            before_ms: request.before_ms,
+            limit: request.limit,
+            album: request.album,
+            include_videos: request.include_videos,
+        },
+        Event::MediaAlbumsRequested {
+            from,
+            include_videos,
+        } => BregeEvent::MediaAlbumsRequested {
+            from: from.to_string(),
+            include_videos,
         },
         Event::RecentMediaReceived {
             from,
@@ -900,6 +1056,18 @@ fn convert_event(event: Event) -> Option<BregeEvent> {
             number: action.number,
             sub_id: action.sub_id,
         },
+        Event::PhoneControlRequested { from, control } => BregeEvent::PhoneControlRequested {
+            from: from.to_string(),
+            kind: ControlKind::from_proto(control.kind)?,
+            value: control.value,
+            stream: VolumeStream::from_proto(control.stream),
+        },
+        Event::CallLogRequested { from, request } => BregeEvent::CallLogRequested {
+            from: from.to_string(),
+            since_ms: request.since_ms,
+            before_ms: request.before_ms,
+            limit: request.limit,
+        },
     })
 }
 
@@ -944,6 +1112,147 @@ impl brege_core::VideoSink for VideoAdapter {
     }
 }
 
+/// An app installed on the phone, for the inventory on the Mac.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct InstalledAppData {
+    pub package: String,
+    pub label: String,
+    pub version: String,
+    pub size_bytes: u64,
+    pub last_used_ms: i64,
+    pub system: bool,
+    pub installed_ms: i64,
+    pub icon_png: Vec<u8>,
+}
+
+impl From<proto::InstalledApp> for InstalledAppData {
+    fn from(a: proto::InstalledApp) -> Self {
+        Self {
+            package: a.package,
+            label: a.label,
+            version: a.version,
+            size_bytes: a.size_bytes,
+            last_used_ms: a.last_used_ms,
+            system: a.system,
+            installed_ms: a.installed_ms,
+            icon_png: a.icon_png,
+        }
+    }
+}
+
+impl From<InstalledAppData> for proto::InstalledApp {
+    fn from(a: InstalledAppData) -> Self {
+        Self {
+            package: a.package,
+            label: a.label,
+            version: a.version,
+            size_bytes: a.size_bytes,
+            last_used_ms: a.last_used_ms,
+            system: a.system,
+            installed_ms: a.installed_ms,
+            icon_png: a.icon_png,
+        }
+    }
+}
+
+/// What the Mac asks the phone to do with an app; the phone always asks the user first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum AppActionKind {
+    Uninstall,
+    AppSettings,
+    NotificationSettings,
+    UsageAccess,
+}
+
+impl AppActionKind {
+    fn to_proto(self) -> proto::app_action::Kind {
+        use proto::app_action::Kind;
+        match self {
+            Self::Uninstall => Kind::Uninstall,
+            Self::AppSettings => Kind::AppSettings,
+            Self::NotificationSettings => Kind::NotificationSettings,
+            Self::UsageAccess => Kind::UsageAccess,
+        }
+    }
+
+    fn from_proto(v: i32) -> Option<Self> {
+        use proto::app_action::Kind;
+        Some(match Kind::try_from(v).ok()? {
+            Kind::Uninstall => Self::Uninstall,
+            Kind::AppSettings => Self::AppSettings,
+            Kind::NotificationSettings => Self::NotificationSettings,
+            Kind::UsageAccess => Self::UsageAccess,
+            Kind::Unspecified => return None,
+        })
+    }
+}
+
+/// One notification category of an app on the phone (Android calls these channels).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NotificationChannelData {
+    pub id: String,
+    pub name: String,
+    pub group: String,
+    /// 0 off, 1 silent, 2 low, 3 normal, 4 high, 5 urgent.
+    pub importance: u32,
+    pub blocked: bool,
+}
+
+/// The notification settings of one app on the phone.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NotificationSettingsData {
+    pub package: String,
+    pub app_label: String,
+    pub channels: Vec<NotificationChannelData>,
+    pub app_blocked: bool,
+    /// False when the phone does not let Brêge change these.
+    pub allowed: bool,
+}
+
+impl From<proto::NotificationSettings> for NotificationSettingsData {
+    fn from(s: proto::NotificationSettings) -> Self {
+        Self {
+            package: s.package,
+            app_label: s.app_label,
+            channels: s
+                .channels
+                .into_iter()
+                .map(|c| NotificationChannelData {
+                    id: c.id,
+                    name: c.name,
+                    group: c.group,
+                    importance: c.importance,
+                    blocked: c.blocked,
+                })
+                .collect(),
+            app_blocked: s.app_blocked,
+            allowed: s.allowed,
+        }
+    }
+}
+
+impl From<NotificationSettingsData> for proto::NotificationSettings {
+    fn from(s: NotificationSettingsData) -> Self {
+        Self {
+            package: s.package,
+            app_label: s.app_label,
+            channels: s
+                .channels
+                .into_iter()
+                .map(|c| proto::NotificationChannel {
+                    id: c.id,
+                    name: c.name,
+                    group: c.group,
+                    importance: c.importance,
+                    blocked: c.blocked,
+                })
+                .collect(),
+            app_blocked: s.app_blocked,
+            allowed: s.allowed,
+        }
+    }
+}
+
 /// A recent photo or screenshot on the phone.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct MediaItemData {
@@ -953,6 +1262,40 @@ pub struct MediaItemData {
     pub screenshot: bool,
     pub mime: String,
     pub thumbnail_jpeg: Vec<u8>,
+    pub size_bytes: u64,
+    pub duration_ms: u32,
+    pub video: bool,
+}
+
+/// An album of the phone's photo library (its gallery folders).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct MediaAlbumData {
+    pub id: String,
+    pub name: String,
+    pub count: u32,
+    pub cover_id: String,
+}
+
+impl From<proto::MediaAlbum> for MediaAlbumData {
+    fn from(a: proto::MediaAlbum) -> Self {
+        Self {
+            id: a.id,
+            name: a.name,
+            count: a.count,
+            cover_id: a.cover_id,
+        }
+    }
+}
+
+impl From<MediaAlbumData> for proto::MediaAlbum {
+    fn from(a: MediaAlbumData) -> Self {
+        Self {
+            id: a.id,
+            name: a.name,
+            count: a.count,
+            cover_id: a.cover_id,
+        }
+    }
 }
 
 impl From<proto::MediaItem> for MediaItemData {
@@ -964,6 +1307,9 @@ impl From<proto::MediaItem> for MediaItemData {
             screenshot: m.screenshot,
             mime: m.mime,
             thumbnail_jpeg: m.thumbnail_jpeg,
+            size_bytes: m.size_bytes,
+            duration_ms: m.duration_ms,
+            video: m.video,
         }
     }
 }
@@ -977,6 +1323,9 @@ impl From<MediaItemData> for proto::MediaItem {
             screenshot: m.screenshot,
             mime: m.mime,
             thumbnail_jpeg: m.thumbnail_jpeg,
+            size_bytes: m.size_bytes,
+            duration_ms: m.duration_ms,
+            video: m.video,
         }
     }
 }
@@ -1266,6 +1615,283 @@ pub enum CallStatus {
     Dialing,
     Active,
     Ended,
+}
+
+/// What the Mac asks the phone to change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ControlKind {
+    Torch,
+    TorchLevel,
+    RingerMode,
+    StreamVolume,
+    Dnd,
+    Vibrate,
+    ClearNotifications,
+}
+
+impl ControlKind {
+    fn to_proto(self) -> proto::phone_control::Kind {
+        use proto::phone_control::Kind;
+        match self {
+            Self::Torch => Kind::Torch,
+            Self::TorchLevel => Kind::TorchLevel,
+            Self::RingerMode => Kind::RingerMode,
+            Self::StreamVolume => Kind::StreamVolume,
+            Self::Dnd => Kind::Dnd,
+            Self::Vibrate => Kind::Vibrate,
+            Self::ClearNotifications => Kind::ClearNotifications,
+        }
+    }
+
+    fn from_proto(v: i32) -> Option<Self> {
+        use proto::phone_control::Kind;
+        Some(match Kind::try_from(v).ok()? {
+            Kind::Torch => Self::Torch,
+            Kind::TorchLevel => Self::TorchLevel,
+            Kind::RingerMode => Self::RingerMode,
+            Kind::StreamVolume => Self::StreamVolume,
+            Kind::Dnd => Self::Dnd,
+            Kind::Vibrate => Self::Vibrate,
+            Kind::ClearNotifications => Self::ClearNotifications,
+            Kind::Unspecified => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum VolumeStream {
+    Ring,
+    Media,
+    Alarm,
+    Notification,
+}
+
+impl VolumeStream {
+    fn to_proto(self) -> proto::phone_control::Stream {
+        use proto::phone_control::Stream;
+        match self {
+            Self::Ring => Stream::Ring,
+            Self::Media => Stream::Media,
+            Self::Alarm => Stream::Alarm,
+            Self::Notification => Stream::Notification,
+        }
+    }
+
+    fn from_proto(v: i32) -> Option<Self> {
+        use proto::phone_control::Stream;
+        Some(match Stream::try_from(v).ok()? {
+            Stream::Ring => Self::Ring,
+            Stream::Media => Self::Media,
+            Stream::Alarm => Self::Alarm,
+            Stream::Notification => Self::Notification,
+            Stream::Unspecified => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RingerMode {
+    Silent,
+    Vibrate,
+    Normal,
+}
+
+impl RingerMode {
+    fn to_proto(self) -> proto::RingerMode {
+        match self {
+            Self::Silent => proto::RingerMode::Silent,
+            Self::Vibrate => proto::RingerMode::Vibrate,
+            Self::Normal => proto::RingerMode::Normal,
+        }
+    }
+
+    fn from_proto(v: i32) -> Self {
+        match proto::RingerMode::try_from(v).unwrap_or(proto::RingerMode::Unspecified) {
+            proto::RingerMode::Silent => Self::Silent,
+            proto::RingerMode::Vibrate => Self::Vibrate,
+            proto::RingerMode::Normal | proto::RingerMode::Unspecified => Self::Normal,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DndMode {
+    Off,
+    Priority,
+    Alarms,
+    None,
+}
+
+impl DndMode {
+    fn to_proto(self) -> proto::DndMode {
+        match self {
+            Self::Off => proto::DndMode::DndOff,
+            Self::Priority => proto::DndMode::DndPriority,
+            Self::Alarms => proto::DndMode::DndAlarms,
+            Self::None => proto::DndMode::DndNone,
+        }
+    }
+
+    fn from_proto(v: i32) -> Self {
+        match proto::DndMode::try_from(v).unwrap_or(proto::DndMode::Unspecified) {
+            proto::DndMode::DndPriority => Self::Priority,
+            proto::DndMode::DndAlarms => Self::Alarms,
+            proto::DndMode::DndNone => Self::None,
+            proto::DndMode::DndOff | proto::DndMode::Unspecified => Self::Off,
+        }
+    }
+}
+
+/// Where the phone's controls stand, and what it is allowed to change.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PhoneControlsData {
+    pub has_torch: bool,
+    pub torch_on: bool,
+    pub torch_level: u32,
+    pub torch_max_level: u32,
+    pub ringer_mode: RingerMode,
+    pub volume_ring: u32,
+    pub volume_ring_max: u32,
+    pub volume_media: u32,
+    pub volume_media_max: u32,
+    pub volume_alarm: u32,
+    pub volume_alarm_max: u32,
+    pub dnd: DndMode,
+    pub needs_dnd_access: bool,
+    pub next_alarm_ms: i64,
+    pub storage_free_bytes: u64,
+    pub storage_total_bytes: u64,
+    pub battery_temperature_dc: i32,
+    pub battery_health: String,
+    pub charging_source: String,
+}
+
+impl From<proto::PhoneControlState> for PhoneControlsData {
+    fn from(s: proto::PhoneControlState) -> Self {
+        Self {
+            has_torch: s.has_torch,
+            torch_on: s.torch_on,
+            torch_level: s.torch_level,
+            torch_max_level: s.torch_max_level,
+            ringer_mode: RingerMode::from_proto(s.ringer_mode),
+            volume_ring: s.volume_ring,
+            volume_ring_max: s.volume_ring_max,
+            volume_media: s.volume_media,
+            volume_media_max: s.volume_media_max,
+            volume_alarm: s.volume_alarm,
+            volume_alarm_max: s.volume_alarm_max,
+            dnd: DndMode::from_proto(s.dnd),
+            needs_dnd_access: s.needs_dnd_access,
+            next_alarm_ms: s.next_alarm_ms,
+            storage_free_bytes: s.storage_free_bytes,
+            storage_total_bytes: s.storage_total_bytes,
+            battery_temperature_dc: s.battery_temperature_dc,
+            battery_health: s.battery_health,
+            charging_source: s.charging_source,
+        }
+    }
+}
+
+impl From<PhoneControlsData> for proto::PhoneControlState {
+    fn from(s: PhoneControlsData) -> Self {
+        Self {
+            has_torch: s.has_torch,
+            torch_on: s.torch_on,
+            torch_level: s.torch_level,
+            torch_max_level: s.torch_max_level,
+            ringer_mode: s.ringer_mode.to_proto() as i32,
+            volume_ring: s.volume_ring,
+            volume_ring_max: s.volume_ring_max,
+            volume_media: s.volume_media,
+            volume_media_max: s.volume_media_max,
+            volume_alarm: s.volume_alarm,
+            volume_alarm_max: s.volume_alarm_max,
+            dnd: s.dnd.to_proto() as i32,
+            needs_dnd_access: s.needs_dnd_access,
+            next_alarm_ms: s.next_alarm_ms,
+            storage_free_bytes: s.storage_free_bytes,
+            storage_total_bytes: s.storage_total_bytes,
+            battery_temperature_dc: s.battery_temperature_dc,
+            battery_health: s.battery_health,
+            charging_source: s.charging_source,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CallDirection {
+    Incoming,
+    Outgoing,
+    Missed,
+    Rejected,
+    Blocked,
+    Voicemail,
+}
+
+impl CallDirection {
+    fn from_proto(v: i32) -> Self {
+        use proto::call_log_entry::Direction;
+        match Direction::try_from(v).unwrap_or(Direction::Unspecified) {
+            Direction::Outgoing => Self::Outgoing,
+            Direction::Missed => Self::Missed,
+            Direction::Rejected => Self::Rejected,
+            Direction::Blocked => Self::Blocked,
+            Direction::Voicemail => Self::Voicemail,
+            Direction::Incoming | Direction::Unspecified => Self::Incoming,
+        }
+    }
+
+    fn to_proto(self) -> proto::call_log_entry::Direction {
+        use proto::call_log_entry::Direction;
+        match self {
+            Self::Incoming => Direction::Incoming,
+            Self::Outgoing => Direction::Outgoing,
+            Self::Missed => Direction::Missed,
+            Self::Rejected => Direction::Rejected,
+            Self::Blocked => Direction::Blocked,
+            Self::Voicemail => Direction::Voicemail,
+        }
+    }
+}
+
+/// One entry of the phone's call log.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CallLogData {
+    pub id: String,
+    pub number: String,
+    pub contact_name: String,
+    pub direction: CallDirection,
+    pub started_ms: i64,
+    pub duration_s: u32,
+    pub sub_id: i32,
+}
+
+impl From<brege_core::CallRecord> for CallLogData {
+    fn from(c: brege_core::CallRecord) -> Self {
+        Self {
+            id: c.id,
+            number: c.number,
+            contact_name: c.name,
+            direction: CallDirection::from_proto(c.direction),
+            started_ms: c.started_ms,
+            duration_s: c.duration_s,
+            sub_id: c.sub_id,
+        }
+    }
+}
+
+impl From<CallLogData> for proto::CallLogEntry {
+    fn from(c: CallLogData) -> Self {
+        Self {
+            id: c.id,
+            number: c.number,
+            contact_name: c.contact_name,
+            direction: c.direction.to_proto() as i32,
+            started_ms: c.started_ms,
+            duration_s: c.duration_s,
+            sub_id: c.sub_id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -2098,6 +2724,149 @@ impl BregeNode {
             .send_recent_media(to, items, new_screenshot, permission_needed)? as u32)
     }
 
+    /// Mac: asks the phone which apps are installed.
+    pub fn request_app_inventory(&self, device_id: String, include_system: bool) -> Result<()> {
+        Ok(self
+            .node
+            .request_app_inventory(parse_id(&device_id)?, include_system)?)
+    }
+
+    /// Mac: uninstall an app or open one of its settings pages; the phone asks the user.
+    pub fn send_app_action(
+        &self,
+        device_id: String,
+        kind: AppActionKind,
+        package: String,
+    ) -> Result<()> {
+        Ok(self
+            .node
+            .send_app_action(parse_id(&device_id)?, kind.to_proto(), &package)?)
+    }
+
+    /// Mac: asks for one app's notification settings.
+    pub fn request_notification_settings(&self, device_id: String, package: String) -> Result<()> {
+        Ok(self
+            .node
+            .request_notification_settings(parse_id(&device_id)?, &package)?)
+    }
+
+    /// Mac: changes how loud one notification category of an app is (0 off … 5 urgent).
+    pub fn update_notification_channel(
+        &self,
+        device_id: String,
+        package: String,
+        channel_id: String,
+        importance: u32,
+    ) -> Result<()> {
+        Ok(self.node.update_notification_channel(
+            parse_id(&device_id)?,
+            &package,
+            &channel_id,
+            importance,
+        )?)
+    }
+
+    /// Phone: answers with the installed apps.
+    pub fn send_app_inventory(
+        &self,
+        device_id: String,
+        apps: Vec<InstalledAppData>,
+        usage_access: bool,
+    ) -> Result<()> {
+        Ok(self.node.send_app_inventory(
+            parse_id(&device_id)?,
+            apps.into_iter().map(Into::into).collect(),
+            usage_access,
+        )?)
+    }
+
+    /// Phone: answers with one app's notification settings.
+    pub fn send_notification_settings(
+        &self,
+        device_id: String,
+        settings: NotificationSettingsData,
+    ) -> Result<()> {
+        Ok(self
+            .node
+            .send_notification_settings(parse_id(&device_id)?, settings.into())?)
+    }
+
+    /// Mac: cached notifications whose app, title or text contain `query`.
+    pub fn search_notifications(
+        &self,
+        query: String,
+        limit: u32,
+    ) -> Result<Vec<StoredNotification>> {
+        Ok(self
+            .node
+            .search_notifications(&query, limit)?
+            .into_iter()
+            .map(|n| StoredNotification {
+                device_id: n.device_id.to_string(),
+                key: n.key,
+                package: n.package,
+                app_label: n.app_label,
+                title: n.title,
+                text: n.text,
+                posted_ms: n.posted_at_ms,
+                dismissed: n.dismissed,
+            })
+            .collect())
+    }
+
+    /// Mac: asks for one page of the photo library; `beforeMs` 0 starts at the newest.
+    pub fn request_media_library(
+        &self,
+        device_id: String,
+        before_ms: i64,
+        limit: u32,
+        album: String,
+        include_videos: bool,
+    ) -> Result<()> {
+        Ok(self.node.request_media_library(
+            parse_id(&device_id)?,
+            before_ms,
+            limit,
+            &album,
+            include_videos,
+        )?)
+    }
+
+    /// Mac: asks the phone for the albums of its library.
+    pub fn request_media_albums(&self, device_id: String, include_videos: bool) -> Result<()> {
+        Ok(self
+            .node
+            .request_media_albums(parse_id(&device_id)?, include_videos)?)
+    }
+
+    /// Phone: answers one Mac with a page of the library.
+    pub fn send_media_library_page(
+        &self,
+        device_id: String,
+        items: Vec<MediaItemData>,
+        end: bool,
+        album: String,
+        permission_needed: bool,
+        partial_access: bool,
+    ) -> Result<()> {
+        Ok(self.node.send_media_library_page(
+            parse_id(&device_id)?,
+            items.into_iter().map(Into::into).collect(),
+            end,
+            &album,
+            permission_needed,
+            partial_access,
+        )?)
+    }
+
+    /// Phone: answers one Mac with the albums of its library.
+    pub fn send_media_albums(&self, device_id: String, albums: Vec<MediaAlbumData>) -> Result<()> {
+        Ok(self.node.send_media_albums(
+            parse_id(&device_id)?,
+            albums.into_iter().map(Into::into).collect(),
+        )?)
+    }
+
     /// Mac: asks for the full file of a photo; the phone answers like a capture request.
     pub fn request_media(&self, device_id: String, media_id: String) -> Result<String> {
         Ok(self.node.request_media(parse_id(&device_id)?, &media_id)?)
@@ -2267,6 +3036,53 @@ impl BregeNode {
             .send_message(parse_id(&device_id)?, &thread_id, &address, &body, sub_id)?)
     }
 
+    /// Mac: changes a control on the phone (torch, sound, Do Not Disturb, clear notifications).
+    pub fn send_phone_control(
+        &self,
+        device_id: String,
+        kind: ControlKind,
+        value: i32,
+        stream: Option<VolumeStream>,
+    ) -> Result<()> {
+        let control = proto::PhoneControl {
+            kind: kind.to_proto() as i32,
+            value,
+            stream: stream
+                .map(|s| s.to_proto() as i32)
+                .unwrap_or(proto::phone_control::Stream::Unspecified as i32),
+        };
+        Ok(self
+            .node
+            .send_phone_control(parse_id(&device_id)?, control)?)
+    }
+
+    /// Phone: tells the Macs where the controls stand.
+    pub fn publish_control_state(&self, state: PhoneControlsData) -> u32 {
+        self.node.publish_control_state(state.into()) as u32
+    }
+
+    /// Cached recent calls, newest first.
+    pub fn recent_calls(&self, device_id: String, limit: u32) -> Result<Vec<CallLogData>> {
+        Ok(self
+            .node
+            .recent_calls(parse_id(&device_id)?, limit)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Asks the phone for calls that are newer than the cache.
+    pub fn request_call_log(&self, device_id: String, limit: u32) -> Result<()> {
+        Ok(self.node.request_call_log(parse_id(&device_id)?, limit)?)
+    }
+
+    /// Asks the phone for calls older than the oldest cached one.
+    pub fn request_older_calls(&self, device_id: String, limit: u32) -> Result<()> {
+        Ok(self
+            .node
+            .request_older_calls(parse_id(&device_id)?, limit)?)
+    }
+
     pub fn call_action(
         &self,
         device_id: String,
@@ -2320,6 +3136,26 @@ impl BregeNode {
                 })
                 .collect(),
         ) as u32
+    }
+
+    /// Phone: sends recent calls to every connected Mac.
+    pub fn publish_call_log(&self, entries: Vec<CallLogData>) -> u32 {
+        self.node
+            .publish_call_log(entries.into_iter().map(Into::into).collect(), false) as u32
+    }
+
+    /// Phone: answers one Mac's request for recent calls.
+    pub fn send_call_log(
+        &self,
+        device_id: String,
+        entries: Vec<CallLogData>,
+        history: bool,
+    ) -> Result<()> {
+        Ok(self.node.send_call_log(
+            parse_id(&device_id)?,
+            entries.into_iter().map(Into::into).collect(),
+            history,
+        )?)
     }
 
     pub fn publish_call_state(&self, call: CallData) -> u32 {

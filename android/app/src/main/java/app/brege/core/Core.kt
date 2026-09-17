@@ -154,6 +154,7 @@ object Core {
             }
             if (event is BregeEvent.PeerConnected) {
                 UptimeLog.record("connected to ${event.name}")
+                app.brege.controls.PhoneControls.publish()
                 Handler(Looper.getMainLooper()).post { BregeNotificationListener.publishOngoingActivities() }
                 HotspotRequests.onPeerConnected(appContext, event.deviceId)
             }

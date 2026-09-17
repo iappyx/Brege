@@ -62,6 +62,9 @@ final class AppModel: ObservableObject {
     private let mediaControls = MediaControlsBridge()
     /// One Messages model per phone, created on first use.
     private var messageModels: [String: MessagesModel] = [:]
+    private var callModels: [String: CallsModel] = [:]
+    private var photoModels: [String: PhotosModel] = [:]
+    private var appInventoryModels: [String: AppInventoryModel] = [:]
     private let callPanel = CallPanelController()
     private let drives = PhoneDriveController()
     let microphone = PhoneMicrophone()
@@ -77,6 +80,10 @@ final class AppModel: ObservableObject {
     private var calls: [String: CallData] = [:]
     /// Unread conversations per phone.
     @Published private(set) var unreadMessages: [String: Int] = [:]
+    /// The phone's controls (torch, sound, Do Not Disturb, alarm, storage, battery detail).
+    @Published private(set) var phoneControls: [String: PhoneControlsData] = [:]
+    /// Missed calls since the calls window was last opened, per phone.
+    @Published private(set) var missedCalls: [String: Int] = [:]
     /// The phone used last from the menu or a window, for actions without a phone of their own
     /// (Services).
     private var lastUsedDevice: String?
@@ -608,6 +615,86 @@ final class AppModel: ObservableObject {
         return model
     }
 
+    func calls(for deviceId: String) -> CallsModel {
+        if let model = callModels[deviceId] { return model }
+        let model = CallsModel(deviceId: deviceId)
+        callModels[deviceId] = model
+        return model
+    }
+
+    /// The phone's SIMs, for the keypad and the calls list.
+    func sims(for deviceId: String) -> [SimData] {
+        (try? node?.sims(deviceId: deviceId)) ?? []
+    }
+
+    func openCalls(deviceId: String) {
+        used(deviceId)
+        let model = calls(for: deviceId)
+        model.attach(node: node)
+        model.reload()
+        model.refreshFromPhone()
+        openWindowAction?(id: "calls", value: deviceId)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func callsWindowOpened(deviceId: String) {
+        guard !Screenshots.isActive else { return } // made-up data only
+        let model = calls(for: deviceId)
+        model.attach(node: node)
+        model.reload()
+        model.refreshFromPhone()
+        missedCalls[deviceId] = 0
+    }
+
+    func photos(for deviceId: String) -> PhotosModel {
+        if let model = photoModels[deviceId] { return model }
+        let model = PhotosModel(deviceId: deviceId, capture: capture) { [weak self] in self?.node }
+        photoModels[deviceId] = model
+        return model
+    }
+
+    func appInventory(for deviceId: String) -> AppInventoryModel {
+        if let model = appInventoryModels[deviceId] { return model }
+        let model = AppInventoryModel(deviceId: deviceId) { [weak self] in self?.node }
+        appInventoryModels[deviceId] = model
+        return model
+    }
+
+    func openAppInventory(deviceId: String) {
+        used(deviceId)
+        openWindowAction?(id: "installed-apps", value: deviceId)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func appsWindowOpened(deviceId: String) {
+        guard !Screenshots.isActive else { return } // made-up data only
+        appInventory(for: deviceId).refresh(device(deviceId))
+    }
+
+    func openNotificationHistory() {
+        openWindowAction?(id: "notification-history", value: "")
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Cached phone notifications, filtered by `query` (empty shows the newest).
+    func notificationHistory(matching query: String) -> [StoredNotification] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard let node else { return [] }
+        if trimmed.isEmpty { return (try? node.recentNotifications(limit: 200)) ?? [] }
+        return (try? node.searchNotifications(query: trimmed, limit: 200)) ?? []
+    }
+
+    func openPhotos(deviceId: String) {
+        used(deviceId)
+        openWindowAction?(id: "photos", value: deviceId)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func photosWindowOpened(deviceId: String) {
+        guard !Screenshots.isActive else { return } // made-up data only
+        photos(for: deviceId).start(device(deviceId))
+    }
+
     func recentPhotos(for deviceId: String) -> RecentPhotosModel {
         if let model = recentPhotoModels[deviceId] { return model }
         let model = RecentPhotosModel(capture: capture) { [weak self] in self?.node }
@@ -717,6 +804,46 @@ final class AppModel: ObservableObject {
 
     // MARK: - Actions
 
+    /// Changes a control on the phone (torch, sound, Do Not Disturb, buzz, clear notifications).
+    func phoneControl(_ device: Device, _ kind: ControlKind, value: Int32, stream: VolumeStream? = nil) {
+        used(device.id)
+        do {
+            try node?.sendPhoneControl(deviceId: device.id, kind: kind, value: value, stream: stream)
+        } catch {
+            presenter.showInfo(title: "Could not change that on the phone", body: "\(error)")
+        }
+    }
+
+    /// Battery percentage the phone last reported, for the controls panel.
+    func batteryPercent(_ deviceId: String) -> Int? {
+        statuses[deviceId].map { Int($0.batteryPct) }
+    }
+
+    /// Which phone's controls are open in the menu.
+    @Published var controlsOpenFor: String?
+
+    /// The controls panel opened: ask the phone for fresh state (it answers with a control update).
+    func toggleControls(_ device: Device) {
+        if controlsOpenFor == device.id {
+            controlsOpenFor = nil
+            return
+        }
+        controlsOpenFor = device.id
+        controlsOpened(device)
+    }
+
+    func controlsOpened(_ device: Device) {
+        used(device.id)
+        // A vibrate of 0 ms is refused by the core, so ask with a harmless torch state request:
+        // the phone publishes its state after every control, and on connect.
+        try? node?.sendPhoneControl(deviceId: device.id, kind: .torch,
+                                    value: phoneControls[device.id]?.torchOn == true ? 1 : 0, stream: nil)
+    }
+
+    func stopRing(_ device: Device) {
+        try? node?.sendCommand(deviceId: device.id, command: .stopRing)
+    }
+
     func ring(_ device: Device) {
         try? node?.sendCommand(deviceId: device.id, command: .ring)
     }
@@ -813,6 +940,10 @@ final class AppModel: ObservableObject {
         case let .peerConnected(deviceId, _):
             refresh()
             messageModels[deviceId]?.resetPhotoRequests()
+            // Recent calls, so the list and the missed badge are current without opening the window.
+            let callsModel = calls(for: deviceId)
+            callsModel.attach(node: node)
+            callsModel.refreshFromPhone()
         case let .ongoingActivityUpdated(from, activity):
             live.updated(activity, from: from)
         case let .ongoingActivityEnded(from, key):
@@ -875,6 +1006,20 @@ final class AppModel: ObservableObject {
             messageModels[from]?.reloadThreads()
         case let .callStateChanged(from, call):
             handleCall(call, from: from)
+        case let .appInventoryReceived(from, apps, usageAccess):
+            appInventoryModels[from]?.received(apps, usageAccess: usageAccess)
+        case let .notificationSettingsReceived(from, settings):
+            appInventoryModels[from]?.settingsReceived(settings)
+        case let .mediaLibraryPage(from, items, end, album, permissionNeeded, partialAccess):
+            photoModels[from]?.pageReceived(items: items, end: end, album: album,
+                                            permissionNeeded: permissionNeeded, partialAccess: partialAccess)
+        case let .mediaAlbumsReceived(from, albums):
+            photoModels[from]?.albumsReceived(albums)
+        case let .phoneControlsChanged(from, state):
+            phoneControls[from] = state
+        case let .callLogUpdated(from, newMissed):
+            callModels[from]?.reload()
+            if newMissed > 0 { missedCalls[from, default: 0] += Int(newMissed) }
         case let .micStateChanged(from, active, _, detail):
             if active, micDevice == nil {
                 // Started from the phone app. Without the driver or a working feed this Mac cannot
@@ -900,6 +1045,9 @@ final class AppModel: ObservableObject {
                 micStatus = detail
             }
         case .messageSyncRequested, .messageHistoryRequested, .messageSendRequested, .callActionRequested,
+             .callLogRequested, .phoneControlRequested, .mediaLibraryRequested, .mediaAlbumsRequested,
+             .appInventoryRequested, .appActionRequested, .notificationSettingsRequested,
+             .notificationChannelUpdateRequested,
              .contactPhotosRequested, .appListRequested, .captureRequested, .recentMediaRequested, .mediaFetchRequested,
              .cameraRequested:
             break // Phone-side events.

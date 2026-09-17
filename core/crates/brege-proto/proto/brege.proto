@@ -82,6 +82,20 @@ message Envelope {
     MediaFetchRequest media_fetch     = 46;
     CameraRequest    camera_request   = 47;
     CameraState      camera_state     = 48;
+    CallLogRequest   call_log_request = 49;
+    CallLogList      call_log         = 50;
+    PhoneControl     phone_control    = 51;
+    PhoneControlState phone_control_state = 52;
+    MediaLibraryRequest media_library_request = 53;
+    MediaLibraryPage media_library_page = 54;
+    MediaAlbumsRequest media_albums_request = 55;
+    MediaAlbums      media_albums     = 56;
+    AppInventoryRequest app_inventory_request = 57;
+    AppInventory     app_inventory    = 58;
+    AppAction        app_action       = 59;
+    NotificationSettingsRequest notification_settings_request = 60;
+    NotificationSettings notification_settings = 61;
+    NotificationChannelUpdate notification_channel_update = 62;
   }
   // 13 and 14 were placeholder SMS/call messages in early builds.
   reserved 13, 14;
@@ -271,6 +285,40 @@ message MediaItem {
   bool screenshot = 4;
   string mime = 5;
   bytes thumbnail_jpeg = 6;         // ≤ 64 KB
+  uint64 size_bytes = 7;            // so the Mac can warn before fetching a large video
+  uint32 duration_ms = 8;           // videos only
+  bool video = 9;
+}
+
+// Mac → phone: one page of the photo library, oldest boundary first so paging survives new photos.
+message MediaLibraryRequest {
+  int64 before_ms = 1;              // 0 = newest page
+  uint32 limit = 2;                 // ≤ 60
+  string album = 3;                 // "" = everything
+  bool include_videos = 4;
+}
+
+message MediaLibraryPage {
+  repeated MediaItem items = 1;
+  bool end = 2;                     // no older items after these
+  string album = 3;
+  bool permission_needed = 4;
+  bool partial_access = 5;          // Android 14+: only the photos the user picked are visible
+}
+
+message MediaAlbumsRequest {
+  bool include_videos = 1;
+}
+
+message MediaAlbum {
+  string id = 1;                    // bucket id
+  string name = 2;
+  uint32 count = 3;
+  string cover_id = 4;              // MediaItem id for the thumbnail
+}
+
+message MediaAlbums {
+  repeated MediaAlbum albums = 1;
 }
 
 // Mac → phone: send the full file; answered with CaptureResult (same request id) and a transfer.
@@ -341,6 +389,68 @@ message PhoneApp {
   bytes icon_png = 3;               // ≤ 32 KB
 }
 
+// The phone's installed apps, for the inventory on the Mac: what is there, how big and how long
+// unused. Sizes and last use need the usage-access grant on the phone.
+message AppInventoryRequest {
+  bool include_system = 1;
+}
+
+message InstalledApp {
+  string package = 1;
+  string label = 2;
+  string version = 3;
+  uint64 size_bytes = 4;            // 0 when usage access is not granted
+  int64 last_used_ms = 5;           // 0 when unknown
+  bool system = 6;
+  int64 installed_ms = 7;
+  bytes icon_png = 8;               // ≤ 32 KB
+}
+
+message AppInventory {
+  repeated InstalledApp apps = 1;   // ≤ 500
+  bool usage_access = 2;            // false: sizes and last use are missing
+}
+
+// Mac → phone: something to do with one app. The phone asks the user for anything destructive.
+message AppAction {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    UNINSTALL = 1;                  // the phone shows Android's own confirmation
+    APP_SETTINGS = 2;               // open that app's settings page
+    NOTIFICATION_SETTINGS = 3;
+    USAGE_ACCESS = 4;               // the phone's "Usage access" screen, for sizes and last use
+  }
+  Kind kind = 1;
+  string package = 2;
+}
+
+// Notification settings of one app. Allowed because Brêge is a companion device of this phone.
+message NotificationSettingsRequest {
+  string package = 1;
+}
+
+message NotificationChannel {
+  string id = 1;
+  string name = 2;
+  string group = 3;
+  uint32 importance = 4;            // 0 none … 5 urgent, as Android counts them
+  bool blocked = 5;
+}
+
+message NotificationSettings {
+  string package = 1;
+  string app_label = 2;
+  repeated NotificationChannel channels = 3;
+  bool app_blocked = 4;             // the whole app is silenced on the phone
+  bool allowed = 5;                 // false: this phone does not let Brêge change these
+}
+
+message NotificationChannelUpdate {
+  string package = 1;
+  string channel_id = 2;
+  uint32 importance = 3;
+}
+
 // Mac → phone: contact photos for the addresses shown in the Messages window.
 message ContactPhotoRequest {
   repeated string addresses = 1;    // ≤ 50 per request
@@ -399,6 +509,37 @@ message CallState {
   int64 started_ms = 6;
 }
 
+// Mac → phone: recent calls, newer than since_ms (0 = initial sync) or older than before_ms.
+message CallLogRequest {
+  int64 since_ms = 1;
+  int64 before_ms = 2;              // 0 = newest; otherwise older entries, for paging
+  uint32 limit = 3;
+}
+
+message CallLogEntry {
+  enum Direction {
+    DIRECTION_UNSPECIFIED = 0;
+    INCOMING = 1;
+    OUTGOING = 2;
+    MISSED = 3;
+    REJECTED = 4;
+    BLOCKED = 5;
+    VOICEMAIL = 6;
+  }
+  string id = 1;                    // the phone's call-log row id
+  string number = 2;
+  string contact_name = 3;
+  Direction direction = 4;
+  int64 started_ms = 5;
+  uint32 duration_s = 6;
+  int32 sub_id = 7;                 // -1 when unknown
+}
+
+message CallLogList {
+  repeated CallLogEntry entries = 1;
+  bool history = 2;                 // answer to a before_ms request, not a live update
+}
+
 // Mac → phone.
 message CallAction {
   enum Kind {
@@ -441,6 +582,68 @@ message StatusUpdate {
   string network_type = 4;          // "5G", "LTE", "WIFI", …
   bool dnd = 5;
   uint32 volume_pct = 6;
+}
+
+// Phone controls from the Mac: torch, sound, Do Not Disturb. Only what a normal app may do.
+message PhoneControl {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    TORCH = 1;                        // value: 0 off, 1 on
+    TORCH_LEVEL = 2;                  // value: 1 … torch_max_level
+    RINGER_MODE = 3;                  // value: RingerMode
+    STREAM_VOLUME = 4;                // stream + value: 0 … that stream's maximum
+    DND = 5;                          // value: DndMode
+    VIBRATE = 6;                      // value: milliseconds
+    CLEAR_NOTIFICATIONS = 7;
+  }
+  enum Stream {
+    STREAM_UNSPECIFIED = 0;
+    RING = 1;
+    MEDIA = 2;
+    ALARM = 3;
+    NOTIFICATION = 4;
+  }
+  Kind kind = 1;
+  int32 value = 2;
+  Stream stream = 3;
+}
+
+enum RingerMode {
+  RINGER_MODE_UNSPECIFIED = 0;
+  SILENT = 1;
+  VIBRATE = 2;
+  NORMAL = 3;
+}
+
+enum DndMode {
+  DND_MODE_UNSPECIFIED = 0;
+  DND_OFF = 1;
+  DND_PRIORITY = 2;
+  DND_ALARMS = 3;
+  DND_NONE = 4;                       // total silence
+}
+
+// Phone → Mac: what the controls currently stand at, plus what the phone is allowed to do.
+message PhoneControlState {
+  bool has_torch = 1;
+  bool torch_on = 2;
+  uint32 torch_level = 3;             // 0 when levels are not supported
+  uint32 torch_max_level = 4;
+  RingerMode ringer_mode = 5;
+  uint32 volume_ring = 6;
+  uint32 volume_ring_max = 7;
+  uint32 volume_media = 8;
+  uint32 volume_media_max = 9;
+  uint32 volume_alarm = 10;
+  uint32 volume_alarm_max = 11;
+  DndMode dnd = 12;
+  bool needs_dnd_access = 13;         // the Mac offers "Allow on phone"
+  int64 next_alarm_ms = 14;           // 0 when no alarm is set
+  uint64 storage_free_bytes = 15;
+  uint64 storage_total_bytes = 16;
+  int32 battery_temperature_dc = 17;  // tenths of a degree Celsius
+  string battery_health = 18;         // "Good", "Overheat", … or "" when unknown
+  string charging_source = 19;        // "AC", "USB", "Wireless", "" when not charging
 }
 
 message MediaState {

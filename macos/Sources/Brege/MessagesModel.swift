@@ -46,6 +46,17 @@ final class MessagesModel: ObservableObject {
 
     var unreadCount: Int { threads.filter(\.unread).count }
 
+    /// Contact names by number, from the cached threads: used for the keypad's suggestions.
+    var knownNames: [String: String] {
+        var names: [String: String] = [:]
+        for thread in threads {
+            for (address, name) in zip(thread.addresses, thread.names) where !name.isEmpty {
+                names[address] = name
+            }
+        }
+        return names
+    }
+
     var selectedThread: ThreadData? { threads.first { $0.id == selectedThreadId } }
 
     init(deviceId: String) {

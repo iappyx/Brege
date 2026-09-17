@@ -26,6 +26,8 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import app.brege.BregeApplication
 import app.brege.R
+import app.brege.calls.CallLogSync
+import app.brege.controls.PhoneControls
 import app.brege.calls.CallMonitor
 import app.brege.clipboard.ClipboardSendActivity
 import app.brege.companion.BleWake
@@ -102,6 +104,8 @@ class BregeService : LifecycleService() {
     private fun startFeatures() {
         MessageSync.startObserving()
         CallMonitor.start()
+        CallLogSync.startObserving()
+        PhoneControls.startWatching()
         HotspotRequests.register(this)
         BleWake.register(this)
         PresenceBeacon.update(this)
@@ -116,6 +120,8 @@ class BregeService : LifecycleService() {
         PresenceBeacon.stop(this)
         MessageSync.stopObserving()
         CallMonitor.stop()
+        CallLogSync.stopObserving()
+        PhoneControls.stopWatching()
         RecentMedia.stopWatching(this)
         stopDiscovery()
         networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }

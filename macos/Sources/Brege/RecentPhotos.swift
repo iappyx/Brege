@@ -158,7 +158,13 @@ struct RecentPhotosStrip: View {
                 .fixedSize(horizontal: false, vertical: true)
         } else if settings.showRecentPhotos || Screenshots.isActive, device.connected, !photos.items.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Recent Photos").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                HStack {
+                    Text("Recent Photos").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("All Photos…") { model.openPhotos(deviceId: device.id) }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
                 HStack(spacing: 6) {
                     ForEach(photos.items) { item in
                         thumbnail(item)

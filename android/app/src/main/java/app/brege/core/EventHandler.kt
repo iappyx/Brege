@@ -17,17 +17,22 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import app.brege.BregeApplication
 import app.brege.R
+import app.brege.calls.CallLogSync
+import app.brege.controls.PhoneControls
 import app.brege.calls.CallMonitor
 import app.brege.camera.CameraService
 import app.brege.capture.CaptureActivity
 import app.brege.companion.CompanionSetup
 import app.brege.diagnostics.UptimeLog
 import app.brege.media.MediaBridge
+import app.brege.apps.AppInventory
+import app.brege.media.MediaLibrary
 import app.brege.media.RecentMedia
 import app.brege.messages.ContactPhotos
 import app.brege.messages.MessageSync
 import app.brege.mic.MicService
 import app.brege.notifications.BregeNotificationListener
+import app.brege.notifications.NotificationSettings
 import app.brege.screen.PhoneApps
 import app.brege.screen.WirelessDebugging
 import app.brege.service.RingPlayer
@@ -70,6 +75,22 @@ object EventHandler {
                 val items = RecentMedia.list(context, event.limit.toInt())
                 runCatching { Core.node?.sendRecentMedia(event.from, items, false, !RecentMedia.hasPermission(context)) }
             }
+            is BregeEvent.AppInventoryRequested -> Core.scope.launch {
+                AppInventory.onRequested(context, event.from, event.includeSystem)
+            }
+            is BregeEvent.AppActionRequested -> AppInventory.onAction(context, event.kind, event.`package`)
+            is BregeEvent.NotificationSettingsRequested ->
+                NotificationSettings.onRequested(context, event.from, event.`package`)
+            is BregeEvent.NotificationChannelUpdateRequested ->
+                NotificationSettings.onUpdate(context, event.`package`, event.channelId, event.importance.toInt())
+            is BregeEvent.MediaLibraryRequested -> Core.scope.launch {
+                MediaLibrary.onPageRequested(
+                    context, event.from, event.beforeMs, event.limit.toInt(), event.album, event.includeVideos,
+                )
+            }
+            is BregeEvent.MediaAlbumsRequested -> Core.scope.launch {
+                MediaLibrary.onAlbumsRequested(context, event.from, event.includeVideos)
+            }
             is BregeEvent.MediaFetchRequested -> Core.scope.launch {
                 RecentMedia.fetch(context, event.from, event.requestId, event.mediaId)
             }
@@ -83,6 +104,11 @@ object EventHandler {
                 runCatching { Core.node?.sendContactPhotos(event.from, photos) }
             }
             is BregeEvent.CallActionRequested -> CallMonitor.perform(event.action, event.number, event.subId)
+            is BregeEvent.PhoneControlRequested ->
+                PhoneControls.perform(event.from, event.kind, event.value, event.stream)
+            is BregeEvent.CallLogRequested -> Core.scope.launch {
+                CallLogSync.onRequested(event.from, event.sinceMs, event.beforeMs, event.limit.toInt())
+            }
             else -> Unit
         }
     }

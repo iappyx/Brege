@@ -81,15 +81,40 @@ object RecentMedia {
         return MediaItemData(
             id = row.id.toString(), name = row.name, takenMs = row.takenMs,
             screenshot = row.path.contains("Screenshots", ignoreCase = true), mime = row.mime, thumbnailJpeg = thumbnail,
+            sizeBytes = 0u, durationMs = 0u, video = row.mime.startsWith("video/"),
         )
     }
 
     fun list(context: Context, limit: Int): List<MediaItemData> = query(context, limit).map { item(context, it) }
 
+    /** One row by MediaStore id, so the Photos window can fetch an old photo or a video too. */
+    private fun byId(context: Context, mediaId: String): Row? {
+        val id = mediaId.toLongOrNull() ?: return null
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.DATE_ADDED, MediaStore.MediaColumns.RELATIVE_PATH,
+            MediaStore.MediaColumns.MIME_TYPE,
+        )
+        for (uri in listOf(collection, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)) {
+            val row = runCatching {
+                context.contentResolver.query(
+                    ContentUris.withAppendedId(uri, id), projection, null, null, null,
+                )?.use { c ->
+                    if (!c.moveToFirst()) return@use null
+                    val added = c.getLong(2) * 1000
+                    Row(c.getLong(0), c.getString(1).orEmpty(), added, added,
+                        c.getString(3).orEmpty(), c.getString(4) ?: "image/jpeg")
+                }
+            }.getOrNull()
+            if (row != null) return row
+        }
+        return null
+    }
+
     /** Sends the full image as a transfer and reports it like a capture. */
     suspend fun fetch(context: Context, mac: String, requestId: String, mediaId: String) {
         val node = Core.ensureStarted() ?: return
-        val row = query(context, 60).firstOrNull { it.id.toString() == mediaId }
+        val row = byId(context, mediaId)
         if (row == null) {
             runCatching { node.sendCaptureResult(mac, requestId, CaptureStatus.FAILED, "", "The photo is no longer on the phone") }
             return
@@ -97,7 +122,12 @@ object RecentMedia {
         val dir = File(context.cacheDir, "outgoing").apply { mkdirs() }
         val file = File(dir, row.name.ifEmpty { "Photo $mediaId.jpg" })
         val copied = runCatching {
-            context.contentResolver.openInputStream(ContentUris.withAppendedId(collection, row.id))!!.use { input ->
+            val uri = if (row.mime.startsWith("video/")) {
+                ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, row.id)
+            } else {
+                ContentUris.withAppendedId(collection, row.id)
+            }
+            context.contentResolver.openInputStream(uri)!!.use { input ->
                 file.outputStream().use { input.copyTo(it) }
             }
         }

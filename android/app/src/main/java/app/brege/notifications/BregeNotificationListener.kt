@@ -194,6 +194,15 @@ class BregeNotificationListener : NotificationListenerService() {
             active[key] ?: OngoingActivities.find(key)
                 ?: runCatching { instance?.activeNotifications?.firstOrNull { it.key == key } }.getOrNull()
 
+        /** The running listener, for reading and changing another app's notification settings. */
+        fun current(): BregeNotificationListener? = instance
+
+        /** Clears the phone's notifications; ongoing ones (music, navigation) stay. */
+        fun clearAll(): Boolean {
+            val service = instance ?: return false
+            return runCatching { service.cancelAllNotifications() }.isSuccess
+        }
+
         /** Runs an action, reply or dismissal requested from the Mac; false if it could not. */
         fun perform(key: String, act: NotificationActKind): Boolean {
             val service = instance ?: return false

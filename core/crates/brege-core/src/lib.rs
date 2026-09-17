@@ -25,7 +25,7 @@ pub use brege_features::open_request::OpenRequest;
 pub use brege_identity::{DeviceId, SecretKey};
 pub use brege_proto::v1 as proto;
 pub use brege_store::KnownNetwork;
-pub use brege_store::{MessageRecord, SimRecord, ThreadRecord};
+pub use brege_store::{CallRecord, MessageRecord, SimRecord, ThreadRecord};
 pub use dialer::DEFAULT_PORT;
 pub use events::{Event, EventSink};
 pub use files::{FsBackend, FsErrorKind, FsFailure, FsWriter, MAX_READ};

@@ -5,6 +5,9 @@
     <!-- Persistent connection -->
     <!-- Optional: Wi‑Fi names for the networks Brêge is used on (network privacy plan). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Phone controls from the Mac: a short buzz, and silencing or Do Not Disturb. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -68,6 +71,11 @@
     <!-- Phone screen: granted by the Mac over adb, lets the app switch wireless debugging on. -->
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- App sizes and last use for the inventory; granted by hand under Usage access. -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
     <!-- Launchable apps for the Mac's app launcher. -->

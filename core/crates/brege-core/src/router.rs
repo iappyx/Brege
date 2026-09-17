@@ -96,6 +96,71 @@ pub(crate) async fn dispatch(inner: &std::sync::Arc<Inner>, from: DeviceId, payl
             new_screenshot: list.new_screenshot,
             permission_needed: list.permission_needed,
         }),
+        Payload::MediaLibraryRequest(mut request) => {
+            request.limit = request
+                .limit
+                .clamp(1, crate::apps::MAX_LIBRARY_ITEMS as u32);
+            crate::apps::truncate(&mut request.album, crate::apps::MAX_ALBUM_NAME);
+            inner.emit(Event::MediaLibraryRequested { from, request });
+        }
+        Payload::MediaLibraryPage(mut page) => {
+            page.items =
+                crate::apps::sanitize_media_items(page.items, crate::apps::MAX_LIBRARY_ITEMS);
+            crate::apps::truncate(&mut page.album, crate::apps::MAX_ALBUM_NAME);
+            inner.emit(Event::MediaLibraryPageReceived { from, page });
+        }
+        Payload::MediaAlbumsRequest(request) => inner.emit(Event::MediaAlbumsRequested {
+            from,
+            include_videos: request.include_videos,
+        }),
+        Payload::MediaAlbums(list) => inner.emit(Event::MediaAlbumsReceived {
+            from,
+            albums: crate::apps::sanitize_albums(list.albums),
+        }),
+        Payload::AppInventoryRequest(request) => inner.emit(Event::AppInventoryRequested {
+            from,
+            include_system: request.include_system,
+        }),
+        Payload::AppInventory(mut inventory) => {
+            inventory.apps.truncate(crate::apps::MAX_APPS);
+            for app in &mut inventory.apps {
+                crate::apps::truncate(&mut app.label, 120);
+                crate::apps::truncate(&mut app.version, 40);
+                crate::apps::truncate(&mut app.package, 255);
+                if app.icon_png.len() > crate::apps::MAX_ICON_BYTES {
+                    app.icon_png.clear();
+                }
+            }
+            inner.emit(Event::AppInventoryReceived { from, inventory });
+        }
+        Payload::AppAction(action) => {
+            if crate::apps::valid_package(&action.package) {
+                inner.emit(Event::AppActionRequested { from, action });
+            }
+        }
+        Payload::NotificationSettingsRequest(request) => {
+            if crate::apps::valid_package(&request.package) {
+                inner.emit(Event::NotificationSettingsRequested {
+                    from,
+                    package: request.package,
+                });
+            }
+        }
+        Payload::NotificationSettings(mut settings) => {
+            settings.channels.truncate(crate::apps::MAX_CHANNELS);
+            for channel in &mut settings.channels {
+                crate::apps::truncate(&mut channel.name, 120);
+                crate::apps::truncate(&mut channel.group, 120);
+                crate::apps::truncate(&mut channel.id, 255);
+            }
+            crate::apps::truncate(&mut settings.app_label, 120);
+            inner.emit(Event::NotificationSettingsReceived { from, settings });
+        }
+        Payload::NotificationChannelUpdate(update) => {
+            if crate::apps::valid_package(&update.package) && !update.channel_id.is_empty() {
+                inner.emit(Event::NotificationChannelUpdateRequested { from, update });
+            }
+        }
         Payload::MediaFetch(fetch) => {
             if crate::apps::valid_request_id(&fetch.request_id)
                 && crate::apps::valid_media_id(&fetch.media_id)
@@ -148,6 +213,10 @@ pub(crate) async fn dispatch(inner: &std::sync::Arc<Inner>, from: DeviceId, payl
         | Payload::Sims(_)
         | Payload::CallState(_)
         | Payload::CallAction(_)
+        | Payload::CallLogRequest(_)
+        | Payload::CallLog(_)
+        | Payload::PhoneControl(_)
+        | Payload::PhoneControlState(_)
         | Payload::ContactPhotoRequest(_)
         | Payload::ContactPhotos(_) => {}
     }

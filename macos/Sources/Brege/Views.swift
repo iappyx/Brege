@@ -193,10 +193,15 @@ private struct NoPhoneView: View {
 /// The ⚙ menu: everything that is not a daily action.
 private struct SettingsMenu: View {
     @Environment(\.openWindow) private var openWindow
+    @EnvironmentObject private var model: AppModel
 
     var body: some View {
         Menu {
             Button("Settings…") { SettingsOpener.open() }
+            Button("Notification History…") {
+                openWindow(id: "notification-history")
+                NSApp.activate(ignoringOtherApps: true)
+            }
             Button("Pair a Phone…") {
                 openWindow(id: "pairing")
                 NSApp.activate(ignoringOtherApps: true)
@@ -229,6 +234,11 @@ struct DeviceCard: View {
             header
             ActivityRows(device: device)
             tiles
+            if model.controlsOpenFor == device.id {
+                PhoneControlsPanel(device: device)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
+                                            removal: .opacity))
+            }
             RecentPhotosStrip(photos: model.recentPhotos(for: device.id), device: device)
             if device.connected, let media = model.media[device.id], !media.title.isEmpty {
                 mediaRow(media)
@@ -269,12 +279,19 @@ struct DeviceCard: View {
             Tile("Messages", symbol: unread > 0 ? "message.badge.filled.fill" : "message",
                  help: "Read and send the phone's text messages, and make calls, in a window on this Mac",
                  badge: unread) { open("messages", device.id) }
+            let missed = model.missedCalls[device.id] ?? 0
+            Tile("Calls", symbol: missed > 0 ? "phone.badge.waveform.fill" : "phone",
+                 help: "Recent calls of this phone, with a keypad to dial any number",
+                 badge: missed) { model.openCalls(deviceId: device.id) }
             Tile("Screen", symbol: "iphone.gen3.radiowaves.left.and.right",
                  help: "See and control the phone's screen on this Mac (needs wireless debugging)",
                  enabled: connected) { open("screen", ScreenTarget(deviceId: device.id)) }
-            Tile("Apps", symbol: "square.grid.3x3",
-                 help: "Open a phone app in its own window on this Mac (needs wireless debugging)",
-                 enabled: connected) { open("phone-apps", device.id) }
+            MenuTile("Apps", symbol: "square.grid.3x3",
+                     help: "Open a phone app in a window (needs wireless debugging), or see what is installed",
+                     enabled: connected) {
+                Button("Open App…") { open("phone-apps", device.id) }
+                Button("Installed Apps…") { model.openAppInventory(deviceId: device.id) }
+            }
             Tile("Send Tab", symbol: "safari",
                  help: "Open the page from Safari, Chrome, Edge, Brave or Arc on the phone (or a link you copied)",
                  enabled: connected) { model.sendTab(to: device) }
@@ -285,6 +302,7 @@ struct DeviceCard: View {
                 Button("Scan Document") { model.used(device.id); model.capture.start(.document, device: device, delivery: .clipboard) }
                 Divider()
                 Button("Live Camera…") { open("phone-camera", device.id) }
+                Button("Photo Library…") { model.openPhotos(deviceId: device.id) }
             }
             MenuTile("Files", symbol: "folder",
                      help: "Browse the phone's shared folders in Finder, or send files to the phone",
@@ -293,8 +311,7 @@ struct DeviceCard: View {
                     .disabled(model.openingDrives.contains(device.id))
                 Button("Send Files…") { model.sendFiles(to: device) }
             }
-            Tile("Ring", symbol: "bell.and.waves.left.and.right",
-                 help: "Make the phone ring loudly to find it, even when it is on silent", enabled: connected) { model.ring(device) }
+            ControlsTile(device: device)
             Tile("Microphone", symbol: micOn ? "mic.fill" : "mic",
                  help: micOn ? "Stop using the phone as this Mac's microphone"
                      : "Use the phone as a microphone on this Mac (appears as “Brêge Microphone”)",
@@ -362,6 +379,22 @@ private struct TileLabel: View {
         .background(active ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary.opacity(0.6)),
                     in: RoundedRectangle(cornerRadius: 9))
         .contentShape(RoundedRectangle(cornerRadius: 9))
+    }
+}
+
+/// Phone controls: torch, sound, Do Not Disturb and what the phone reports. The panel opens inside
+/// the menu, because a popover would close this window before the buttons act.
+private struct ControlsTile: View {
+    @EnvironmentObject private var model: AppModel
+    let device: Device
+
+    var body: some View {
+        Tile("Controls", symbol: "slider.horizontal.3",
+             help: "Ring the phone, and change its torch, sound and Do Not Disturb from here",
+             active: model.controlsOpenFor == device.id || model.phoneControls[device.id]?.torchOn == true,
+             enabled: device.connected) {
+            withAnimation(.easeOut(duration: 0.18)) { model.toggleControls(device) }
+        }
     }
 }
 

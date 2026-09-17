@@ -39,6 +39,18 @@ pub struct MessageRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallRecord {
+    pub id: String,
+    pub number: String,
+    pub name: String,
+    /// `brege.v1.CallLogEntry.Direction`
+    pub direction: i32,
+    pub started_ms: i64,
+    pub duration_s: u32,
+    pub sub_id: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SimRecord {
     pub sub_id: i32,
     pub label: String,
@@ -223,6 +235,75 @@ impl Store {
         Ok(())
     }
 
+    /// Stores recent calls and keeps the newest [`crate::MAX_CALLS`] per phone.
+    pub fn upsert_calls(&self, device: &DeviceId, calls: &[CallRecord]) -> Result<(), StoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        for call in calls {
+            tx.execute(
+                "INSERT INTO call_log (device_id, id, number, name, direction, started_ms, duration_s, sub_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(device_id, id) DO UPDATE SET number = excluded.number, name = excluded.name,
+                   direction = excluded.direction, started_ms = excluded.started_ms,
+                   duration_s = excluded.duration_s, sub_id = excluded.sub_id",
+                params![
+                    device.as_bytes().as_slice(),
+                    call.id,
+                    call.number,
+                    call.name,
+                    call.direction,
+                    call.started_ms,
+                    call.duration_s,
+                    call.sub_id
+                ],
+            )?;
+        }
+        tx.execute(
+            "DELETE FROM call_log WHERE device_id = ?1 AND id NOT IN
+               (SELECT id FROM call_log WHERE device_id = ?1 ORDER BY started_ms DESC LIMIT ?2)",
+            params![device.as_bytes().as_slice(), crate::MAX_CALLS],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Recent calls, newest first.
+    pub fn calls(&self, device: &DeviceId, limit: u32) -> Result<Vec<CallRecord>, StoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, number, name, direction, started_ms, duration_s, sub_id FROM call_log
+             WHERE device_id = ?1 ORDER BY started_ms DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![device.as_bytes().as_slice(), limit], |r| {
+            Ok(CallRecord {
+                id: r.get(0)?,
+                number: r.get(1)?,
+                name: r.get(2)?,
+                direction: r.get(3)?,
+                started_ms: r.get(4)?,
+                duration_s: r.get(5)?,
+                sub_id: r.get(6)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Start time of the newest cached call, for incremental sync.
+    pub fn newest_call_ms(&self, device: &DeviceId) -> Result<Option<i64>, StoreError> {
+        Ok(self.conn.query_row(
+            "SELECT MAX(started_ms) FROM call_log WHERE device_id = ?1",
+            [device.as_bytes().as_slice()],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Start time of the oldest cached call, for paging older entries.
+    pub fn oldest_call_ms(&self, device: &DeviceId) -> Result<Option<i64>, StoreError> {
+        Ok(self.conn.query_row(
+            "SELECT MIN(started_ms) FROM call_log WHERE device_id = ?1",
+            [device.as_bytes().as_slice()],
+            |r| r.get(0),
+        )?)
+    }
+
     pub fn sims(&self, device: &DeviceId) -> Result<Vec<SimRecord>, StoreError> {
         let mut stmt = self
             .conn
@@ -332,6 +413,42 @@ mod tests {
             vec![10, 20, 30]
         );
         assert_eq!(store.newest_message_ms(&dev).unwrap(), Some(40));
+    }
+
+    #[test]
+    fn calls_are_cached_and_capped() {
+        let (store, dev) = setup();
+        let call = |id: &str, ms: i64| CallRecord {
+            id: id.into(),
+            number: "+31612345678".into(),
+            name: "Sam".into(),
+            direction: 1,
+            started_ms: ms,
+            duration_s: 30,
+            sub_id: -1,
+        };
+        store
+            .upsert_calls(&dev, &[call("1", 10), call("2", 20)])
+            .unwrap();
+        // The same id arrives again with a longer duration: it updates, it does not duplicate.
+        let mut longer = call("2", 20);
+        longer.duration_s = 90;
+        store.upsert_calls(&dev, &[longer]).unwrap();
+        let cached = store.calls(&dev, 10).unwrap();
+        assert_eq!(cached.len(), 2);
+        assert_eq!(cached[0].id, "2");
+        assert_eq!(cached[0].duration_s, 90);
+        assert_eq!(store.newest_call_ms(&dev).unwrap(), Some(20));
+        assert_eq!(store.oldest_call_ms(&dev).unwrap(), Some(10));
+
+        let many: Vec<_> = (0..crate::MAX_CALLS + 20)
+            .map(|i| call(&format!("x{i}"), 1000 + i))
+            .collect();
+        store.upsert_calls(&dev, &many).unwrap();
+        assert_eq!(
+            store.calls(&dev, 10_000).unwrap().len() as i64,
+            crate::MAX_CALLS
+        );
     }
 
     #[test]

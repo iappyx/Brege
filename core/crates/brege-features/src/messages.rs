@@ -7,7 +7,9 @@ use brege_proto::v1::{CallAction, SmsSend, call_action};
 
 /// Upper bound for one outgoing message; long SMS are split into parts by the phone.
 pub const MAX_BODY_CHARS: usize = 5_000;
-const MAX_NUMBER_LEN: usize = 32;
+pub const MAX_NUMBER_LEN: usize = 32;
+/// Upper bound for a contact name arriving from a peer.
+pub const MAX_NAME_CHARS: usize = 100;
 
 /// Messages per batch when a phone publishes threads or messages (keeps frames well below the cap).
 pub const SYNC_BATCH: usize = 200;
@@ -76,6 +78,11 @@ pub fn validate_send(send: &SmsSend) -> Result<(), Invalid> {
         return Err(Invalid::BadNumber);
     }
     Ok(())
+}
+
+/// Cuts a string from a peer to `max` characters, so a rogue peer cannot bloat the cache.
+pub fn clamp(text: &str, max: usize) -> String {
+    text.chars().take(max).collect()
 }
 
 pub fn validate_call_action(action: &CallAction) -> Result<call_action::Kind, Invalid> {

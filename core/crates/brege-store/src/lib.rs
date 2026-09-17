@@ -12,7 +12,7 @@ use rusqlite_migration::{M, Migrations};
 
 mod messages;
 
-pub use messages::{MessageRecord, SimRecord, ThreadRecord};
+pub use messages::{CallRecord, MessageRecord, SimRecord, ThreadRecord};
 
 fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
@@ -20,8 +20,12 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!("../migrations/002_messages.sql")),
         M::up(include_str!("../migrations/003_known_networks.sql")),
         M::up(include_str!("../migrations/004_network_names.sql")),
+        M::up(include_str!("../migrations/005_call_log.sql")),
     ])
 }
+
+/// Recent calls kept per phone; older ones are dropped when new calls arrive.
+pub const MAX_CALLS: i64 = 500;
 
 /// Notification history is kept for seven days.
 pub const NOTIFICATION_RETENTION_MS: i64 = 7 * 24 * 60 * 60 * 1000;
@@ -300,6 +304,48 @@ impl Store {
             params![device.as_bytes().as_slice(), key],
         )?;
         Ok(())
+    }
+
+    /// Notifications whose app, title or text contain `query`, newest first.
+    pub fn search_notifications(
+        &self,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<NotificationRecord>, StoreError> {
+        // `%` and `_` in the user's words must match themselves, not act as wildcards.
+        let escaped = query
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        let pattern = format!("%{escaped}%");
+        let mut stmt = self.conn.prepare(
+            "SELECT device_id, key, package, app_label, title, text, posted_at_ms, dismissed
+             FROM notification
+             WHERE app_label LIKE ?1 ESCAPE '\\' OR title LIKE ?1 ESCAPE '\\'
+                OR text LIKE ?1 ESCAPE '\\' OR package LIKE ?1 ESCAPE '\\'
+             ORDER BY posted_at_ms DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![pattern, limit], |r| {
+            Ok((
+                r.get::<_, Vec<u8>>(0)?,
+                NotificationRecord {
+                    device_id: DeviceId::from_bytes([0; 32]),
+                    key: r.get(1)?,
+                    package: r.get(2)?,
+                    app_label: r.get(3)?,
+                    title: r.get(4)?,
+                    text: r.get(5)?,
+                    posted_at_ms: r.get(6)?,
+                    dismissed: r.get(7)?,
+                },
+            ))
+        })?;
+        rows.map(|row| {
+            let (id, mut rec) = row?;
+            rec.device_id = DeviceId::from_bytes(id.try_into().unwrap_or([0; 32]));
+            Ok(rec)
+        })
+        .collect()
     }
 
     pub fn recent_notifications(&self, limit: u32) -> Result<Vec<NotificationRecord>, StoreError> {

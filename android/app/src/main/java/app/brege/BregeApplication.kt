@@ -3,6 +3,8 @@ package app.brege
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import app.brege.calls.CallLogSync
+import app.brege.controls.PhoneControls
 import app.brege.calls.CallMonitor
 import app.brege.core.Core
 import app.brege.messages.MessageSync
@@ -23,6 +25,8 @@ class BregeApplication : Application() {
         Core.init(this)
         MessageSync.init(this)
         CallMonitor.init(this)
+        CallLogSync.init(this)
+        PhoneControls.init(this)
     }
 
     companion object {

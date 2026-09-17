@@ -56,11 +56,26 @@ pub(crate) fn truncate(text: &mut String, max: usize) {
 pub const MAX_MEDIA_ITEMS: usize = 12;
 pub const MAX_THUMBNAIL_BYTES: usize = 64 * 1024;
 
+/// Largest page of the photo library one request may carry.
+pub const MAX_LIBRARY_ITEMS: usize = 60;
+/// Longest album name kept from a peer.
+pub const MAX_ALBUM_NAME: usize = 100;
+/// Most albums in one list.
+pub const MAX_ALBUMS: usize = 200;
+
 pub(crate) fn sanitize_media(items: Vec<proto::MediaItem>) -> Vec<proto::MediaItem> {
+    sanitize_media_items(items, MAX_MEDIA_ITEMS)
+}
+
+/// Keeps a page of the library within bounds: known ids, short strings, small thumbnails.
+pub(crate) fn sanitize_media_items(
+    items: Vec<proto::MediaItem>,
+    max: usize,
+) -> Vec<proto::MediaItem> {
     items
         .into_iter()
         .filter(|m| valid_media_id(&m.id))
-        .take(MAX_MEDIA_ITEMS)
+        .take(max)
         .map(|mut m| {
             truncate(&mut m.name, 255);
             truncate(&mut m.mime, 100);
@@ -71,6 +86,24 @@ pub(crate) fn sanitize_media(items: Vec<proto::MediaItem>) -> Vec<proto::MediaIt
         })
         .collect()
 }
+
+pub(crate) fn sanitize_albums(albums: Vec<proto::MediaAlbum>) -> Vec<proto::MediaAlbum> {
+    albums
+        .into_iter()
+        .take(MAX_ALBUMS)
+        .map(|mut a| {
+            truncate(&mut a.id, 64);
+            truncate(&mut a.name, MAX_ALBUM_NAME);
+            if !a.cover_id.is_empty() && !valid_media_id(&a.cover_id) {
+                a.cover_id.clear();
+            }
+            a
+        })
+        .collect()
+}
+
+/// Most notification channels of one app.
+pub const MAX_CHANNELS: usize = 100;
 
 /// MediaStore ids are decimal numbers.
 pub fn valid_media_id(id: &str) -> bool {

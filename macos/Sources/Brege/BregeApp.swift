@@ -23,6 +23,36 @@ struct BregeApp: App {
         }
         .defaultSize(width: 900, height: 620)
 
+        WindowGroup("Installed Apps", id: "installed-apps", for: String.self) { $deviceId in
+            if let deviceId {
+                PhoneAppsInventoryView(model: model.appInventory(for: deviceId))
+                    .environmentObject(model)
+            }
+        }
+        .defaultSize(width: 620, height: 560)
+
+        Window("Notification History", id: "notification-history") {
+            NotificationHistoryView()
+                .environmentObject(model)
+        }
+        .defaultSize(width: 520, height: 520)
+
+        WindowGroup("Photos", id: "photos", for: String.self) { $deviceId in
+            if let deviceId {
+                PhotosView(model: model.photos(for: deviceId))
+                    .environmentObject(model)
+            }
+        }
+        .defaultSize(width: 860, height: 620)
+
+        WindowGroup("Calls", id: "calls", for: String.self) { $deviceId in
+            if let deviceId {
+                CallsView(model: model.calls(for: deviceId))
+                    .environmentObject(model)
+            }
+        }
+        .defaultSize(width: 460, height: 560)
+
         WindowGroup("Phone Screen", id: "screen", for: ScreenTarget.self) { $target in
             if let target {
                 PhoneScreenWindow(target: target)

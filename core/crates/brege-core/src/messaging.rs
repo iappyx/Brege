@@ -93,6 +93,49 @@ fn handle_threads(inner: &Inner, from: DeviceId, list: proto::SmsThreadList) {
     }
 }
 
+/// Stores recent calls from the phone and reports how many missed ones are new.
+fn handle_call_log(inner: &Inner, from: DeviceId, list: proto::CallLogList) {
+    let entries: Vec<brege_store::CallRecord> = list
+        .entries
+        .iter()
+        .filter(|e| !e.id.is_empty())
+        .map(|e| brege_store::CallRecord {
+            id: e.id.clone(),
+            number: messages::clamp(&e.number, messages::MAX_NUMBER_LEN),
+            name: messages::clamp(&e.contact_name, messages::MAX_NAME_CHARS),
+            direction: e.direction,
+            started_ms: e.started_ms,
+            duration_s: e.duration_s,
+            sub_id: e.sub_id,
+        })
+        .collect();
+    if entries.is_empty() {
+        return;
+    }
+    let known = inner
+        .store
+        .lock()
+        .unwrap()
+        .newest_call_ms(&from)
+        .unwrap_or(None)
+        .unwrap_or(0);
+    let missed = proto::call_log_entry::Direction::Missed as i32;
+    // Only live pushes count as new; a history page never does.
+    let new_missed = if list.history {
+        0
+    } else {
+        entries
+            .iter()
+            .filter(|e| e.direction == missed && e.started_ms > known)
+            .count() as u32
+    };
+    if let Err(e) = inner.store.lock().unwrap().upsert_calls(&from, &entries) {
+        tracing::warn!("cannot store recent calls: {e}");
+        return;
+    }
+    inner.emit(Event::CallLogUpdated { from, new_missed });
+}
+
 fn handle_messages(inner: &Inner, from: DeviceId, list: proto::SmsMessageList) {
     let store = inner.store.lock().unwrap();
     let mut ids: Vec<String> = Vec::new();
@@ -163,6 +206,7 @@ pub(crate) fn dispatch(inner: &Arc<Inner>, from: DeviceId, payload: Payload) -> 
             });
         }
         Payload::CallState(call) => inner.emit(Event::CallStateChanged { from, call }),
+        Payload::CallLog(list) => handle_call_log(inner, from, list),
         Payload::ContactPhotos(list) => {
             let photos = list
                 .photos
@@ -208,6 +252,14 @@ pub(crate) fn dispatch(inner: &Arc<Inner>, from: DeviceId, payload: Payload) -> 
             Ok(_) => inner.emit(Event::CallActionRequested { from, action }),
             Err(e) => tracing::info!("rejecting call action: {e}"),
         },
+        Payload::CallLogRequest(request) => inner.emit(Event::CallLogRequested { from, request }),
+        Payload::PhoneControl(control) => match brege_features::controls::validate(&control) {
+            Ok(control) => inner.emit(Event::PhoneControlRequested { from, control }),
+            Err(e) => tracing::info!("rejecting phone control: {e}"),
+        },
+        Payload::PhoneControlState(state) => {
+            inner.emit(Event::PhoneControlStateChanged { from, state })
+        }
         other => return Some(other),
     }
     None

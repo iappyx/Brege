@@ -4,6 +4,7 @@
 
 pub mod clipboard;
 pub mod codes;
+pub mod controls;
 pub mod files;
 pub mod messages;
 pub mod notifications;
