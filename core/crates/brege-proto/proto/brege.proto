@@ -96,6 +96,8 @@ message Envelope {
     NotificationSettingsRequest notification_settings_request = 60;
     NotificationSettings notification_settings = 61;
     NotificationChannelUpdate notification_channel_update = 62;
+    SensorsRequest   sensors_request  = 63;
+    Conditions       conditions       = 64;
   }
   // 13 and 14 were placeholder SMS/call messages in early builds.
   reserved 13, 14;
@@ -759,4 +761,39 @@ message FsResponse {
 // Header written at the start of a FILE stream, after the StreamType varint.
 message FileStreamHeader {
   string transfer_id = 1;
+}
+
+// --- Conditions: what the phone's own sensors say about where it is ---------------------------
+
+message SensorsRequest {
+  uint32 history_hours = 1;           // how much pressure history to send back, 1..24
+  bool watch_motion = 2;              // only then does the phone watch how it lies (costs power)
+}
+
+message PressurePoint {
+  int64 at_ms = 1;
+  float hpa = 2;
+}
+
+// Everything here comes from sensors that need no permission at all.
+message Conditions {
+  bool has_barometer = 1;
+  float pressure_hpa = 2;
+  float pressure_delta_3h = 3;        // now minus three hours ago, negative when falling
+  int64 falling_since_ms = 4;         // 0 when the pressure is not falling
+  float altitude_delta_m = 5;         // since the oldest point that is still kept
+  repeated PressurePoint history = 6;
+
+  bool has_light = 7;
+  float light_lux = 8;
+  bool dark_room = 9;                 // below the dark threshold for two minutes
+
+  float battery_temp_c = 10;
+  float charge_watts = 11;            // 0 when not charging
+  float charge_amps = 12;
+  float charge_volts = 13;
+  uint32 thermal_status = 14;         // 0 none, 1 light, 2 moderate, 3 severe, 4 critical, 5+ worse
+
+  bool has_accelerometer = 15;
+  bool face_down = 16;
 }

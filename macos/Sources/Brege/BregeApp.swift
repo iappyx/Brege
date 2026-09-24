@@ -31,6 +31,14 @@ struct BregeApp: App {
         }
         .defaultSize(width: 620, height: 560)
 
+        WindowGroup("Conditions", id: "conditions", for: String.self) { $deviceId in
+            if let deviceId {
+                ConditionsView(model: model.conditions(for: deviceId))
+                    .environmentObject(model)
+            }
+        }
+        .defaultSize(width: 500, height: 620)
+
         Window("Notification History", id: "notification-history") {
             NotificationHistoryView()
                 .environmentObject(model)

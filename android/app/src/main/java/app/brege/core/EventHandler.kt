@@ -19,6 +19,7 @@ import app.brege.BregeApplication
 import app.brege.R
 import app.brege.calls.CallLogSync
 import app.brege.controls.PhoneControls
+import app.brege.sensors.Conditions
 import app.brege.calls.CallMonitor
 import app.brege.camera.CameraService
 import app.brege.capture.CaptureActivity
@@ -106,6 +107,8 @@ object EventHandler {
             is BregeEvent.CallActionRequested -> CallMonitor.perform(event.action, event.number, event.subId)
             is BregeEvent.PhoneControlRequested ->
                 PhoneControls.perform(event.from, event.kind, event.value, event.stream)
+            is BregeEvent.ConditionsRequested ->
+                Conditions.onRequested(event.from, event.historyHours, event.watchMotion)
             is BregeEvent.CallLogRequested -> Core.scope.launch {
                 CallLogSync.onRequested(event.from, event.sinceMs, event.beforeMs, event.limit.toInt())
             }

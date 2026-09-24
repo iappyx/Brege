@@ -1009,6 +1009,33 @@ impl Node {
     }
 
     /// Phone side: tells the Macs where the controls stand.
+    /// Mac side: asks the phone what its sensors say, with `history_hours` of pressure.
+    /// `watch_motion` asks the phone to watch how it lies, which it otherwise does not.
+    pub fn request_conditions(
+        &self,
+        phone: DeviceId,
+        history_hours: u32,
+        watch_motion: bool,
+    ) -> Result<()> {
+        self.inner.send_to(
+            &phone,
+            Payload::SensorsRequest(proto::SensorsRequest {
+                history_hours: history_hours.clamp(1, crate::apps::MAX_HISTORY_HOURS),
+                watch_motion,
+            }),
+        )
+    }
+
+    /// Phone side: sends the readings to one Mac.
+    pub fn send_conditions(&self, mac: DeviceId, conditions: proto::Conditions) -> Result<()> {
+        self.inner.send_to(&mac, Payload::Conditions(conditions))
+    }
+
+    /// Phone side: tells every connected Mac, used when the phone is turned over or the room darkens.
+    pub fn publish_conditions(&self, conditions: proto::Conditions) -> usize {
+        self.inner.broadcast(Payload::Conditions(conditions))
+    }
+
     pub fn publish_control_state(&self, state: proto::PhoneControlState) -> usize {
         self.inner.broadcast(Payload::PhoneControlState(state))
     }

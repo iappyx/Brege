@@ -65,6 +65,7 @@ final class AppModel: ObservableObject {
     private var callModels: [String: CallsModel] = [:]
     private var photoModels: [String: PhotosModel] = [:]
     private var appInventoryModels: [String: AppInventoryModel] = [:]
+    private var conditionsModels: [String: ConditionsModel] = [:]
     private let callPanel = CallPanelController()
     private let drives = PhoneDriveController()
     let microphone = PhoneMicrophone()
@@ -653,6 +654,19 @@ final class AppModel: ObservableObject {
         return model
     }
 
+    func conditions(for deviceId: String) -> ConditionsModel {
+        if let model = conditionsModels[deviceId] { return model }
+        let model = ConditionsModel(deviceId: deviceId) { [weak self] in self?.node }
+        conditionsModels[deviceId] = model
+        return model
+    }
+
+    func openConditions(deviceId: String) {
+        used(deviceId)
+        openWindowAction?(id: "conditions", value: deviceId)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func appInventory(for deviceId: String) -> AppInventoryModel {
         if let model = appInventoryModels[deviceId] { return model }
         let model = AppInventoryModel(deviceId: deviceId) { [weak self] in self?.node }
@@ -821,6 +835,18 @@ final class AppModel: ObservableObject {
 
     /// Which phone's controls are open in the menu.
     @Published var controlsOpenFor: String?
+    /// The Conditions card is folded away until it is asked for, like the controls.
+    @Published var conditionsOpenFor: String?
+
+    func toggleConditions(_ device: Device) {
+        if conditionsOpenFor == device.id {
+            conditionsOpenFor = nil
+            return
+        }
+        conditionsOpenFor = device.id
+        used(device.id)
+        conditions(for: device.id).refresh(device)
+    }
 
     /// The controls panel opened: ask the phone for fresh state (it answers with a control update).
     func toggleControls(_ device: Device) {
@@ -1017,6 +1043,11 @@ final class AppModel: ObservableObject {
             photoModels[from]?.albumsReceived(albums)
         case let .phoneControlsChanged(from, state):
             phoneControls[from] = state
+        case .conditionsRequested:
+            break // phone side only
+        case let .conditionsChanged(from, conditions):
+            self.conditions(for: from).received(conditions)
+            ConditionsAutomation.apply(conditions, presenter: presenter)
         case let .callLogUpdated(from, newMissed):
             callModels[from]?.reload()
             if newMissed > 0 { missedCalls[from, default: 0] += Int(newMissed) }

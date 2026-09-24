@@ -18,6 +18,10 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     var onMissedCall: ((String, String, Bool) -> Void)?
     private static func callIdentifier(_ deviceId: String) -> String { "brege.call.incoming.\(deviceId)" }
 
+    /// While true, mirrored phone notifications are held back (the phone lies face down).
+    /// Calls, files and Brêge's own messages still come through.
+    var paused = false
+
     private let maxCategories = 64
     private var categoryOrder: [String] = []
     private var categories: [String: UNNotificationCategory] = [:]
@@ -53,7 +57,7 @@ final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func show(_ n: NotificationData, from deviceId: String) {
-        guard let center else { return }
+        guard let center, !paused else { return }
         let content = UNMutableNotificationContent()
         content.title = n.title.isEmpty ? n.appLabel : n.title
         content.subtitle = n.title.isEmpty ? "" : n.appLabel

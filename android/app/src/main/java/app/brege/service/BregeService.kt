@@ -28,6 +28,7 @@ import app.brege.BregeApplication
 import app.brege.R
 import app.brege.calls.CallLogSync
 import app.brege.controls.PhoneControls
+import app.brege.sensors.Conditions
 import app.brege.calls.CallMonitor
 import app.brege.clipboard.ClipboardSendActivity
 import app.brege.companion.BleWake
@@ -106,6 +107,7 @@ class BregeService : LifecycleService() {
         CallMonitor.start()
         CallLogSync.startObserving()
         PhoneControls.startWatching()
+        Conditions.start()
         HotspotRequests.register(this)
         BleWake.register(this)
         PresenceBeacon.update(this)
@@ -122,6 +124,7 @@ class BregeService : LifecycleService() {
         CallMonitor.stop()
         CallLogSync.stopObserving()
         PhoneControls.stopWatching()
+        Conditions.stop()
         RecentMedia.stopWatching(this)
         stopDiscovery()
         networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }

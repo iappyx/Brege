@@ -103,6 +103,10 @@ pub(crate) fn sanitize_albums(albums: Vec<proto::MediaAlbum>) -> Vec<proto::Medi
 }
 
 /// Most notification channels of one app.
+/// A day of pressure, one point a minute at most, and never more than a day asked for.
+pub const MAX_PRESSURE_POINTS: usize = 1_500;
+pub const MAX_HISTORY_HOURS: u32 = 24;
+
 pub const MAX_CHANNELS: usize = 100;
 
 /// MediaStore ids are decimal numbers.

@@ -124,6 +124,17 @@ pub enum Event {
         from: DeviceId,
         state: proto::MicState,
     },
+    /// Mac side: what the phone's sensors report — pressure, light, warmth, how it lies.
+    ConditionsChanged {
+        from: DeviceId,
+        conditions: proto::Conditions,
+    },
+    /// Phone side: a Mac asks for the current sensor readings.
+    ConditionsRequested {
+        from: DeviceId,
+        history_hours: u32,
+        watch_motion: bool,
+    },
     /// Mac side: the phone's torch, sound and Do Not Disturb state.
     PhoneControlStateChanged {
         from: DeviceId,

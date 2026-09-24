@@ -59,6 +59,10 @@ networking, pairing and encryption.
 - Phone controls in the menu: torch (with brightness), silent or vibrate, the volume sliders, Do Not
   Disturb, a buzz to find the phone, and clear all notifications — with storage, battery detail and
   the next alarm at a glance.
+- Conditions from the phone's own sensors: air pressure with a day's chart and what it means for
+  the weather, room light, battery warmth, charge power and thermal state — none of it needs a
+  permission. Optionally the Mac holds phone notifications while the phone lies face down, or
+  switches to dark mode when the room goes dark.
 - Every installed app with its size, version and how long since you last used it. Ask the phone to
   uninstall one or open its settings; the phone always confirms.
 

@@ -156,6 +156,17 @@ pub(crate) async fn dispatch(inner: &std::sync::Arc<Inner>, from: DeviceId, payl
             crate::apps::truncate(&mut settings.app_label, 120);
             inner.emit(Event::NotificationSettingsReceived { from, settings });
         }
+        Payload::SensorsRequest(request) => inner.emit(Event::ConditionsRequested {
+            from,
+            history_hours: request.history_hours.clamp(1, crate::apps::MAX_HISTORY_HOURS),
+            watch_motion: request.watch_motion,
+        }),
+        Payload::Conditions(mut conditions) => {
+            conditions
+                .history
+                .truncate(crate::apps::MAX_PRESSURE_POINTS);
+            inner.emit(Event::ConditionsChanged { from, conditions });
+        }
         Payload::NotificationChannelUpdate(update) => {
             if crate::apps::valid_package(&update.package) && !update.channel_id.is_empty() {
                 inner.emit(Event::NotificationChannelUpdateRequested { from, update });

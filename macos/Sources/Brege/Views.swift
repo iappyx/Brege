@@ -239,6 +239,11 @@ struct DeviceCard: View {
                     .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
                                             removal: .opacity))
             }
+            if model.conditionsOpenFor == device.id {
+                ConditionsCard(device: device, conditions: model.conditions(for: device.id))
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
+                                            removal: .opacity))
+            }
             RecentPhotosStrip(photos: model.recentPhotos(for: device.id), device: device)
             if device.connected, let media = model.media[device.id], !media.title.isEmpty {
                 mediaRow(media)
@@ -312,6 +317,7 @@ struct DeviceCard: View {
                 Button("Send Files…") { model.sendFiles(to: device) }
             }
             ControlsTile(device: device)
+            ConditionsTile(device: device)
             Tile("Microphone", symbol: micOn ? "mic.fill" : "mic",
                  help: micOn ? "Stop using the phone as this Mac's microphone"
                      : "Use the phone as a microphone on this Mac (appears as “Brêge Microphone”)",
@@ -384,6 +390,21 @@ private struct TileLabel: View {
 
 /// Phone controls: torch, sound, Do Not Disturb and what the phone reports. The panel opens inside
 /// the menu, because a popover would close this window before the buttons act.
+/// Air pressure, room light and how warm the phone runs — folded away until asked for.
+private struct ConditionsTile: View {
+    @EnvironmentObject private var model: AppModel
+    let device: Device
+
+    var body: some View {
+        Tile("Conditions", symbol: "barometer",
+             help: "What the phone's sensors say: air pressure and the weather trend, room light, warmth",
+             active: model.conditionsOpenFor == device.id,
+             enabled: device.connected) {
+            withAnimation(.easeOut(duration: 0.18)) { model.toggleConditions(device) }
+        }
+    }
+}
+
 private struct ControlsTile: View {
     @EnvironmentObject private var model: AppModel
     let device: Device

@@ -501,6 +501,17 @@ pub enum BregeEvent {
         status: MessageStatus,
         error: String,
     },
+    /// Mac side: what the phone's sensors report — pressure, light, warmth, how it lies.
+    ConditionsChanged {
+        from: String,
+        conditions: ConditionsData,
+    },
+    /// Phone side: a Mac asks for the sensor readings.
+    ConditionsRequested {
+        from: String,
+        history_hours: u32,
+        watch_motion: bool,
+    },
     /// Mac side: the phone's controls changed (torch, sound, Do Not Disturb, storage, alarm).
     PhoneControlsChanged {
         from: String,
@@ -844,6 +855,19 @@ fn convert_event(event: Event) -> Option<BregeEvent> {
             client_id: status.client_id,
             status: MessageStatus::from_proto(status.status),
             error: status.error,
+        },
+        Event::ConditionsChanged { from, conditions } => BregeEvent::ConditionsChanged {
+            from: from.to_string(),
+            conditions: conditions.into(),
+        },
+        Event::ConditionsRequested {
+            from,
+            history_hours,
+            watch_motion,
+        } => BregeEvent::ConditionsRequested {
+            from: from.to_string(),
+            history_hours,
+            watch_motion,
         },
         Event::PhoneControlStateChanged { from, state } => BregeEvent::PhoneControlsChanged {
             from: from.to_string(),
@@ -1738,6 +1762,98 @@ impl DndMode {
             proto::DndMode::DndAlarms => Self::Alarms,
             proto::DndMode::DndNone => Self::None,
             proto::DndMode::DndOff | proto::DndMode::Unspecified => Self::Off,
+        }
+    }
+}
+
+/// One air-pressure reading, for the chart on the Mac.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PressurePointData {
+    pub at_ms: i64,
+    pub hpa: f32,
+}
+
+impl From<proto::PressurePoint> for PressurePointData {
+    fn from(p: proto::PressurePoint) -> Self {
+        Self {
+            at_ms: p.at_ms,
+            hpa: p.hpa,
+        }
+    }
+}
+
+impl From<PressurePointData> for proto::PressurePoint {
+    fn from(p: PressurePointData) -> Self {
+        Self {
+            at_ms: p.at_ms,
+            hpa: p.hpa,
+        }
+    }
+}
+
+/// What the phone's own sensors say: air pressure and its trend, room light, warmth, how it lies.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ConditionsData {
+    pub has_barometer: bool,
+    pub pressure_hpa: f32,
+    pub pressure_delta3h: f32,
+    pub falling_since_ms: i64,
+    pub altitude_delta_m: f32,
+    pub history: Vec<PressurePointData>,
+    pub has_light: bool,
+    pub light_lux: f32,
+    pub dark_room: bool,
+    pub battery_temp_c: f32,
+    pub charge_watts: f32,
+    pub charge_amps: f32,
+    pub charge_volts: f32,
+    pub thermal_status: u32,
+    pub has_accelerometer: bool,
+    pub face_down: bool,
+}
+
+impl From<proto::Conditions> for ConditionsData {
+    fn from(c: proto::Conditions) -> Self {
+        Self {
+            has_barometer: c.has_barometer,
+            pressure_hpa: c.pressure_hpa,
+            pressure_delta3h: c.pressure_delta_3h,
+            falling_since_ms: c.falling_since_ms,
+            altitude_delta_m: c.altitude_delta_m,
+            history: c.history.into_iter().map(Into::into).collect(),
+            has_light: c.has_light,
+            light_lux: c.light_lux,
+            dark_room: c.dark_room,
+            battery_temp_c: c.battery_temp_c,
+            charge_watts: c.charge_watts,
+            charge_amps: c.charge_amps,
+            charge_volts: c.charge_volts,
+            thermal_status: c.thermal_status,
+            has_accelerometer: c.has_accelerometer,
+            face_down: c.face_down,
+        }
+    }
+}
+
+impl From<ConditionsData> for proto::Conditions {
+    fn from(c: ConditionsData) -> Self {
+        Self {
+            has_barometer: c.has_barometer,
+            pressure_hpa: c.pressure_hpa,
+            pressure_delta_3h: c.pressure_delta3h,
+            falling_since_ms: c.falling_since_ms,
+            altitude_delta_m: c.altitude_delta_m,
+            history: c.history.into_iter().map(Into::into).collect(),
+            has_light: c.has_light,
+            light_lux: c.light_lux,
+            dark_room: c.dark_room,
+            battery_temp_c: c.battery_temp_c,
+            charge_watts: c.charge_watts,
+            charge_amps: c.charge_amps,
+            charge_volts: c.charge_volts,
+            thermal_status: c.thermal_status,
+            has_accelerometer: c.has_accelerometer,
+            face_down: c.face_down,
         }
     }
 }
@@ -3057,6 +3173,30 @@ impl BregeNode {
     }
 
     /// Phone: tells the Macs where the controls stand.
+    /// Mac side: asks the phone what its sensors say.
+    pub fn request_conditions(
+        &self,
+        device_id: String,
+        history_hours: u32,
+        watch_motion: bool,
+    ) -> Result<()> {
+        Ok(self
+            .node
+            .request_conditions(parse_id(&device_id)?, history_hours, watch_motion)?)
+    }
+
+    /// Phone side: answers one Mac.
+    pub fn send_conditions(&self, device_id: String, conditions: ConditionsData) -> Result<()> {
+        Ok(self
+            .node
+            .send_conditions(parse_id(&device_id)?, conditions.into())?)
+    }
+
+    /// Phone side: tells every connected Mac, when the phone is turned over or the room darkens.
+    pub fn publish_conditions(&self, conditions: ConditionsData) -> u32 {
+        self.node.publish_conditions(conditions.into()) as u32
+    }
+
     pub fn publish_control_state(&self, state: PhoneControlsData) -> u32 {
         self.node.publish_control_state(state.into()) as u32
     }
