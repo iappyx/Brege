@@ -1,0 +1,85 @@
+# Builds Brêge.app on GitHub's macOS runner.
+# - Push a tag like v1.0.0: builds that version and publishes it as a GitHub Release with a zip.
+# - Run it by hand (Actions tab -> Release -> Run workflow): builds a test zip, downloadable from
+#   the run page for a week, and publishes nothing.
+# The app is ad-hoc signed (there is no Apple developer account behind it), so users confirm the
+# first launch once in System Settings.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create the release
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=0.0.0-test" >> "$GITHUB_ENV"
+          fi
+
+      - name: Rust toolchain
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain stable --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Add the Apple Silicon target
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Build Brêge.app
+        run: ./scripts/build-release.sh
+
+      - name: Upload test build
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Brege-${{ env.VERSION }}
+          path: macos/build/Brege-${{ env.VERSION }}.zip
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<EOF
+          Brêge for macOS $VERSION — for Macs with Apple Silicon, macOS 13 or newer.
+
+          **Install**
+
+          1. Download \`Brege-$VERSION.zip\` below and unzip it.
+          2. Drag **Brêge.app** to your Applications folder.
+          3. Open it. macOS blocks it the first time, because the app is not notarized by Apple.
+          4. Open **System Settings → Privacy & Security**, scroll down to the message about Brêge
+             and click **Open Anyway**.
+          5. Allow **notifications**, **Bluetooth** and **Local Network** when Brêge asks. Without
+             Local Network it cannot reach your phone.
+
+          Brêge lives in the menu bar; there is no window in the Dock.
+
+          **The phone side**
+
+          The Android app is not published here. Build and install it from this repository
+          (\`scripts/build-core-android.sh\`, then \`./gradlew assembleDebug\`), then pair the two:
+          **Pair a Phone…** on the Mac, **Scan pairing code** on the phone.
+
+          **After an update**
+
+          Each build has its own signature, so macOS treats an updated Brêge as a new app: it asks
+          again for Local Network access and for permission to use its own Keychain entry. Allow
+          both, or the phone will not connect.
+          EOF
+          gh release create "$GITHUB_REF_NAME" "macos/build/Brege-$VERSION.zip" \
+            --title "Brêge for macOS $VERSION" --notes-file notes.md

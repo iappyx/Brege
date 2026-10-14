@@ -19,6 +19,25 @@ networking, pairing and encryption.
 
 > Screenshots show made-up phones, people and networks.
 
+## Download
+
+Get the latest **Brege-x.y.z.zip** from [Releases](https://github.com/iappyx/Brege/releases).
+For Macs with Apple Silicon, macOS 13 or newer. (Building from source also works on Intel.)
+
+1. Unzip it and drag **Brêge.app** to your Applications folder.
+2. Open it. macOS blocks it the first time, because the app is not notarized by Apple.
+3. Open **System Settings › Privacy & Security**, scroll down to the message about Brêge and click
+   **Open Anyway**.
+4. Allow **notifications**, **Bluetooth** and **Local Network** when Brêge asks. Without Local
+   Network it cannot reach your phone.
+
+Brêge lives in the menu bar, not in the Dock. The Android app is not published as a download: build
+and install it from this repository (see [Build](#build)), then pair the two.
+
+Each build is signed by itself rather than by a developer account, so macOS treats an update as a
+new app and asks again for Local Network access and for Brêge's own Keychain entry. Allow both,
+or the phone will not connect.
+
 ## What it does
 
 **Messages and calls**
