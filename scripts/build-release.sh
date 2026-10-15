@@ -54,3 +54,4 @@ ditto -c -k --keepParent "$APP" "$ZIP"
 
 echo "--- done ---"
 echo "$ZIP ($(du -h "$ZIP" | cut -f1), $ARCHS, version $VERSION)"
+echo "note: macos/Generated now holds a $ARCHS core; run scripts/build-core-apple.sh before building locally again."

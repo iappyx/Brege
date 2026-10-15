@@ -110,6 +110,38 @@ final class AppModel: ObservableObject {
     /// Remembers the phone an action was started for.
     func used(_ deviceId: String) { lastUsedDevice = deviceId }
 
+    // --- folded phones ---------------------------------------------------------------------
+    // With three phones the menu grows taller than the screen, so a phone can be folded to its
+    // name and battery. The choice is remembered between launches.
+
+    @Published private(set) var foldedDevices: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: "menu.foldedDevices") ?? [])
+
+    func isFolded(_ deviceId: String) -> Bool { foldedDevices.contains(deviceId) }
+
+    /// From three phones on, the menu is taller than a laptop screen, so the ones you are not
+    /// using start folded. Done once: after that the choice is yours.
+    private func foldExtraPhones() {
+        let key = "menu.foldsSeeded"
+        guard devices.count >= 3, !UserDefaults.standard.bool(forKey: key) else { return }
+        let keepOpen = defaultConnectedDevice?.id ?? devices.first?.id
+        foldedDevices.formUnion(devices.map(\.id).filter { $0 != keepOpen })
+        UserDefaults.standard.set(Array(foldedDevices), forKey: "menu.foldedDevices")
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    func toggleFolded(_ deviceId: String) {
+        if foldedDevices.contains(deviceId) {
+            foldedDevices.remove(deviceId)
+        } else {
+            foldedDevices.insert(deviceId)
+            // Panels of a folded phone would keep taking room in the menu without being visible.
+            if controlsOpenFor == deviceId { controlsOpenFor = nil }
+            if conditionsOpenFor == deviceId { conditionsOpenFor = nil }
+        }
+        UserDefaults.standard.set(Array(foldedDevices), forKey: "menu.foldedDevices")
+    }
+
     /// The phone for actions that do not name one (Services): the one used last if it is
     /// connected, else the first connected one.
     var defaultConnectedDevice: Device? {
@@ -532,6 +564,7 @@ final class AppModel: ObservableObject {
             servicesWritten = true
         }
         devices = paired
+        foldExtraPhones()
         // New or forgotten phones change the Bonjour ids.
         restartBonjour()
         refreshNetworkPaths()

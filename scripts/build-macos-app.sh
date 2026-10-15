@@ -18,14 +18,21 @@ cd "$MAC"
 read -r -a ARCH_LIST <<< "${ARCHS:-arm64 x86_64}"
 
 # Multi-arch `swift build --arch a --arch b` needs full Xcode, so build each slice and lipo.
+# Every triple writes into the same products directory, so each slice is copied out before the
+# next one overwrites it.
+SLICES="$(mktemp -d)"
+trap 'rm -rf "$SLICES"' EXIT
 BINS=()
 HELPERS=()
 for arch in "${ARCH_LIST[@]}"; do
   triple="$arch-apple-macosx13.0"
   swift build -c release --triple "$triple" --product Brege
   swift build -c release --triple "$triple" --product BregeServices
-  BINS+=("$(swift build -c release --triple "$triple" --show-bin-path)/Brege")
-  HELPERS+=("$(swift build -c release --triple "$triple" --show-bin-path)/BregeServices")
+  OUT="$(swift build -c release --triple "$triple" --show-bin-path)"
+  cp "$OUT/Brege" "$SLICES/Brege-$arch"
+  cp "$OUT/BregeServices" "$SLICES/BregeServices-$arch"
+  BINS+=("$SLICES/Brege-$arch")
+  HELPERS+=("$SLICES/BregeServices-$arch")
 done
 
 rm -rf "$APP"

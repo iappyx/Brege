@@ -4,8 +4,42 @@ import SwiftUI
 struct MenuContentView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
+    /// The menu's own window, so it can be resized when a phone folds (see MenuWindow).
+    @State private var window: NSWindow?
+    /// How tall the menu would like to be; past the screen's height it scrolls instead.
+    @State private var wantedHeight: CGFloat = 0
+
+    /// What is left under the menu bar, minus a margin so the menu never touches the dock.
+    private var roomOnScreen: CGFloat { (NSScreen.main?.visibleFrame.height ?? 900) - 24 }
 
     var body: some View {
+        Group {
+            if wantedHeight > roomOnScreen {
+                // Opening a panel on a third phone can outgrow the screen; then, and only then,
+                // the menu scrolls, at exactly the height that fits.
+                ScrollView(.vertical) { menu }
+                    .frame(width: 340, height: roomOnScreen)
+            } else {
+                menu
+                    .frame(width: 340, alignment: .top)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .background(WindowReader { window = $0 })
+        .onPreferenceChange(MenuHeightKey.self) { height in
+            wantedHeight = height
+            // The menu's window does not follow its content in either direction, so it is set here.
+            MenuWindow.fit(window, to: min(height, roomOnScreen))
+        }
+        .onAppear {
+            model.openWindowAction = openWindow
+            model.refresh()
+            for device in model.devices where device.connected { model.recentPhotos(for: device.id).refresh(device) }
+            model.hotspot.refreshKnownNetworks()
+        }
+    }
+
+    private var menu: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let error = model.startupError {
                 Warning(symbol: "exclamationmark.triangle", tint: .red, title: "Brêge could not start", detail: error)
@@ -61,12 +95,49 @@ struct MenuContentView: View {
             }
         }
         .padding(14)
-        .frame(width: 340)
-        .onAppear {
-            model.openWindowAction = openWindow
-            model.refresh()
-            for device in model.devices where device.connected { model.recentPhotos(for: device.id).refresh(device) }
-            model.hotspot.refreshKnownNetworks()
+        .frame(width: 340, alignment: .top)
+        // The height the content wants, measured whether it ends up scrolling or not.
+        .background(GeometryReader { geo in
+            Color.clear.preference(key: MenuHeightKey.self, value: geo.size.height)
+        })
+    }
+}
+
+/// Hands back the NSWindow a SwiftUI view ends up in.
+private struct WindowReader: NSViewRepresentable {
+    let onWindow: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async { onWindow(view.window) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async { onWindow(view.window) }
+    }
+}
+
+/// How tall the menu's content wants to be.
+private struct MenuHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// The menu bar's window keeps the height it was opened at: a panel that opens is cut off at the
+/// bottom, and a phone that folds leaves the menu floating in an oversized window. So the height
+/// is set here, from what the content measured, with the top edge pinned under the menu bar.
+private enum MenuWindow {
+    static func fit(_ window: NSWindow?, to height: CGFloat) {
+        guard let window, height > 1 else { return }
+        // A turn later, so SwiftUI has finished laying the new content out.
+        DispatchQueue.main.async {
+            guard abs(window.frame.height - height) > 1 else { return }
+            let top = window.frame.maxY
+            var frame = window.frame
+            frame.size.height = height
+            frame.origin.y = top - height
+            window.setFrame(frame, display: true)
         }
     }
 }
@@ -232,8 +303,9 @@ struct DeviceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            ActivityRows(device: device)
-            tiles
+            if !model.isFolded(device.id) {
+                ActivityRows(device: device)
+                tiles
             if model.controlsOpenFor == device.id {
                 PhoneControlsPanel(device: device)
                     .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
@@ -244,9 +316,10 @@ struct DeviceCard: View {
                     .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
                                             removal: .opacity))
             }
-            RecentPhotosStrip(photos: model.recentPhotos(for: device.id), device: device)
-            if device.connected, let media = model.media[device.id], !media.title.isEmpty {
-                mediaRow(media)
+                RecentPhotosStrip(photos: model.recentPhotos(for: device.id), device: device)
+                if device.connected, let media = model.media[device.id], !media.title.isEmpty {
+                    mediaRow(media)
+                }
             }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
@@ -262,15 +335,31 @@ struct DeviceCard: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: device.connected ? "iphone.gen3" : "iphone.gen3.slash")
-                .font(.title2)
-                .foregroundStyle(device.connected ? .primary : .secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(device.name).font(.headline)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+        let folded = model.isFolded(device.id)
+        return HStack(spacing: 10) {
+            Button {
+                // No animation: the menu's window resizes to fit, and an animated change leaves it
+                // at the old height with the content floating in the middle of it.
+                model.toggleFolded(device.id)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: device.connected ? "iphone.gen3" : "iphone.gen3.slash")
+                        .font(.title2)
+                        .foregroundStyle(device.connected ? .primary : .secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(device.name).font(.headline)
+                        Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(folded ? 0 : 90))
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
+            .help(folded ? "Show what this phone can do" : "Fold this phone away")
             if showsSettings { SettingsMenu() }
         }
     }
