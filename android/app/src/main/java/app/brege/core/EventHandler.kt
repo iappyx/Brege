@@ -107,6 +107,12 @@ object EventHandler {
             is BregeEvent.CallActionRequested -> CallMonitor.perform(event.action, event.number, event.subId)
             is BregeEvent.PhoneControlRequested ->
                 PhoneControls.perform(event.from, event.kind, event.value, event.stream)
+            is BregeEvent.MacStateChanged ->
+                app.brege.watch.WatchRelay.onMacState(context, event.state)
+            is BregeEvent.WatchSettingsChanged ->
+                app.brege.watch.WatchRelay.onWatchSettings(event.settings)
+            is BregeEvent.MacAlertReceived ->
+                app.brege.watch.WatchRelay.onMacAlert(context, event.alert.title, event.alert.body)
             is BregeEvent.ConditionsRequested ->
                 Conditions.onRequested(event.from, event.historyHours, event.watchMotion)
             is BregeEvent.CallLogRequested -> Core.scope.launch {

@@ -7,8 +7,8 @@
 **Brêge** (Frisian for *bridge*) connects an Android phone to a Mac: messages and calls, notifications, the clipboard, files, photos, the phone's screen, camera and
 microphone, and its everyday settings — directly over your own network, without an account or a cloud service.
 
-A menu bar app on the Mac, a companion app on the phone, and a shared Rust core that does the
-networking, pairing and encryption.
+A menu bar app on the Mac, a companion app on the phone, an optional watch app for Wear OS, and a
+shared Rust core that does the networking, pairing and encryption.
 
 <p align="center">
   <picture>
@@ -84,6 +84,18 @@ or the phone will not connect.
   switches to dark mode when the room goes dark.
 - Every installed app with its size, version and how long since you last used it. Ask the phone to
   uninstall one or open its settings; the phone always confirms.
+
+**On your wrist**
+- An optional Wear OS app and tile: ring the Mac to find it, put it to sleep and lock it, change
+  its volume, mute it, and see its volume and battery at a glance.
+- Play, pause and skip what the Mac is playing, and step through slides. These press keys on your
+  behalf, so they appear only once you allow Brêge under Privacy & Security › Accessibility.
+- Optionally lock the Mac when the watch walks out of Bluetooth range of the phone, after half a
+  minute's grace. Coming back does not unlock it: macOS asks for your password.
+- Optionally show Brêge's own alerts on the watch — a finished transfer, a low Mac battery, a phone
+  out of reach. macOS does not let any app read other apps' notifications, so those cannot be
+  mirrored.
+- The watch talks to the phone, and the phone to the Mac; it needs no pairing of its own.
 
 **Around the edges**
 - Several phones at once, each with its own windows and menu entries.
@@ -164,6 +176,7 @@ Brêge has no server, no account and no analytics. Phone and Mac talk to each ot
 - An Android phone with Android 10 or later (some features need newer versions; developed on
   Android 16 and 17).
 - Both on the same network, or reachable through your own VPN.
+- Optional, for the watch app: a Wear OS watch running Android 11 or later, paired to the phone.
 - For the phone screen and app windows only: Android platform tools (`adb`), e.g.
   `brew install --cask android-platform-tools`.
 
@@ -182,10 +195,15 @@ scripts/build-core-apple.sh
 scripts/build-macos-app.sh
 scripts/install-macos-app.sh
 
-# Android: core and Kotlin bindings, then the APK
+# Android: core and Kotlin bindings, then the APKs
 scripts/build-core-android.sh
-(cd android && ./gradlew assembleDebug)   # → android/app/build/outputs/apk/debug/app-debug.apk
+(cd android && ./gradlew assembleDebug)   # phone → android/app/build/outputs/apk/debug/app-debug.apk
+                                          # watch → android/wear/build/outputs/apk/debug/wear-debug.apk
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+
+# Watch (optional): over wireless debugging, since a watch has no usable USB
+adb connect <watch-ip>:<port>             # Settings › Developer options › Wireless debugging
+adb -s <watch-ip>:<port> install -r android/wear/build/outputs/apk/debug/wear-debug.apk
 ```
 
 The Mac app is signed with a local development identity when one exists, otherwise ad hoc; macOS
@@ -208,13 +226,16 @@ then asks for Keychain access again after each rebuild.
      Do Not Disturb access.
    - **App sizes and last use:** allow Brêge under Settings › Apps › Special app access › Usage
      access. Both screens can be opened from the Mac, which sends the phone a notification to tap.
+   - **Watch:** install the watch app (see [Build](#build)) and add the Brêge tile by long-pressing
+     the watch face. Choose what it may do in Settings › Watch on the Mac. Playback and slide
+     control also need Privacy & Security › Accessibility.
 
 ## Project layout
 
 ```
 core/      Rust workspace: identity and pairing, transport, store, transfers, drive, features, FFI
 macos/     SwiftPM package: the Brêge menu bar app, the Services helper, the microphone driver
-android/   Gradle project (Kotlin, Jetpack Compose)
+android/   Gradle project (Kotlin, Jetpack Compose): :app for the phone, :wear for the watch
 scripts/   Build, install, notices and screenshot scripts
 docs/      Screenshots
 ```
@@ -222,9 +243,14 @@ docs/      Screenshots
 ## Status
 
 Brêge is a personal project under active development and is not published in any app store. It is
-tested on a Mac with macOS 26 and 27 and on a Pixel phone and an Android tablet.
+tested on a Mac with macOS 26 and 27, on a Pixel phone and an Android tablet, and on a Wear OS
+watch.
 Paused or not planned: an Android desktop mode window, a system camera extension for the Mac (needs
 a paid Apple developer account), and speakerphone control from the Mac.
+Tried and dropped: the watch as a Bluetooth mouse. It worked, but the link to the Mac goes quiet for
+about a fifth of a second at a time, so the cursor arrives in steps rather than moving. Measurement
+ruled out the report rate, the quality-of-service request, Wi‑Fi and the phone's own Bluetooth; the
+interval is set by the link policy, which Android does not expose to apps.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 

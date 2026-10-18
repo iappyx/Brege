@@ -501,6 +501,27 @@ pub enum BregeEvent {
         status: MessageStatus,
         error: String,
     },
+    /// Mac side: a phone, or the watch behind it, asks this Mac to ring, lock or change volume.
+    MacActionRequested {
+        from: String,
+        kind: MacActionKind,
+        value: i32,
+    },
+    /// Phone side: what the Mac asks the phone to do for it (watch rules).
+    WatchSettingsChanged {
+        from: String,
+        settings: WatchSettingsData,
+    },
+    /// Phone side: something the Mac wants to show on the wrist.
+    MacAlertReceived {
+        from: String,
+        alert: MacAlertData,
+    },
+    /// Phone side: how the Mac stands — volume, battery, whether it is ringing.
+    MacStateChanged {
+        from: String,
+        state: MacStateData,
+    },
     /// Mac side: what the phone's sensors report — pressure, light, warmth, how it lies.
     ConditionsChanged {
         from: String,
@@ -855,6 +876,23 @@ fn convert_event(event: Event) -> Option<BregeEvent> {
             client_id: status.client_id,
             status: MessageStatus::from_proto(status.status),
             error: status.error,
+        },
+        Event::MacActionRequested { from, action } => BregeEvent::MacActionRequested {
+            from: from.to_string(),
+            kind: MacActionKind::from_proto(action.kind)?,
+            value: action.value,
+        },
+        Event::WatchSettingsChanged { from, settings } => BregeEvent::WatchSettingsChanged {
+            from: from.to_string(),
+            settings: settings.into(),
+        },
+        Event::MacAlertReceived { from, alert } => BregeEvent::MacAlertReceived {
+            from: from.to_string(),
+            alert: alert.into(),
+        },
+        Event::MacStateChanged { from, state } => BregeEvent::MacStateChanged {
+            from: from.to_string(),
+            state: state.into(),
         },
         Event::ConditionsChanged { from, conditions } => BregeEvent::ConditionsChanged {
             from: from.to_string(),
@@ -1762,6 +1800,152 @@ impl DndMode {
             proto::DndMode::DndAlarms => Self::Alarms,
             proto::DndMode::DndNone => Self::None,
             proto::DndMode::DndOff | proto::DndMode::Unspecified => Self::Off,
+        }
+    }
+}
+
+/// What a phone (or a watch) may ask of a Mac.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum MacActionKind {
+    Ring,
+    Lock,
+    Volume,
+    Mute,
+    State,
+    MediaPlayPause,
+    MediaNext,
+    MediaPrevious,
+    SlideNext,
+    SlidePrevious,
+}
+
+impl MacActionKind {
+    fn from_proto(value: i32) -> Option<Self> {
+        use proto::mac_action::Kind;
+        Some(match Kind::try_from(value).ok()? {
+            Kind::Ring => Self::Ring,
+            Kind::Lock => Self::Lock,
+            Kind::Volume => Self::Volume,
+            Kind::Mute => Self::Mute,
+            Kind::State => Self::State,
+            Kind::MediaPlayPause => Self::MediaPlayPause,
+            Kind::MediaNext => Self::MediaNext,
+            Kind::MediaPrevious => Self::MediaPrevious,
+            Kind::SlideNext => Self::SlideNext,
+            Kind::SlidePrevious => Self::SlidePrevious,
+            Kind::Unspecified => return None,
+        })
+    }
+
+    fn to_proto(self) -> proto::mac_action::Kind {
+        use proto::mac_action::Kind;
+        match self {
+            Self::Ring => Kind::Ring,
+            Self::Lock => Kind::Lock,
+            Self::Volume => Kind::Volume,
+            Self::Mute => Kind::Mute,
+            Self::State => Kind::State,
+            Self::MediaPlayPause => Kind::MediaPlayPause,
+            Self::MediaNext => Kind::MediaNext,
+            Self::MediaPrevious => Kind::MediaPrevious,
+            Self::SlideNext => Kind::SlideNext,
+            Self::SlidePrevious => Kind::SlidePrevious,
+        }
+    }
+}
+
+/// How a Mac stands, as the phone and the watch show it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct MacStateData {
+    pub name: String,
+    pub volume: u32,
+    pub muted: bool,
+    pub has_battery: bool,
+    pub battery: u32,
+    pub charging: bool,
+    pub ringing: bool,
+    pub key_control: bool,
+}
+
+/// What a Mac asks its phones to do for it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WatchSettingsData {
+    pub lock_when_watch_away: bool,
+    pub alerts_on_watch: bool,
+    pub key_control: bool,
+}
+
+impl From<proto::WatchSettings> for WatchSettingsData {
+    fn from(s: proto::WatchSettings) -> Self {
+        Self {
+            lock_when_watch_away: s.lock_when_watch_away,
+            alerts_on_watch: s.alerts_on_watch,
+            key_control: s.key_control,
+        }
+    }
+}
+
+impl From<WatchSettingsData> for proto::WatchSettings {
+    fn from(s: WatchSettingsData) -> Self {
+        Self {
+            lock_when_watch_away: s.lock_when_watch_away,
+            alerts_on_watch: s.alerts_on_watch,
+            key_control: s.key_control,
+        }
+    }
+}
+
+/// Something the Mac wants to say while you are away from it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct MacAlertData {
+    pub title: String,
+    pub body: String,
+}
+
+impl From<proto::MacAlert> for MacAlertData {
+    fn from(a: proto::MacAlert) -> Self {
+        Self {
+            title: a.title,
+            body: a.body,
+        }
+    }
+}
+
+impl From<MacAlertData> for proto::MacAlert {
+    fn from(a: MacAlertData) -> Self {
+        Self {
+            title: a.title,
+            body: a.body,
+        }
+    }
+}
+
+impl From<proto::MacState> for MacStateData {
+    fn from(s: proto::MacState) -> Self {
+        Self {
+            name: s.name,
+            volume: s.volume,
+            muted: s.muted,
+            has_battery: s.has_battery,
+            battery: s.battery,
+            charging: s.charging,
+            ringing: s.ringing,
+            key_control: s.key_control,
+        }
+    }
+}
+
+impl From<MacStateData> for proto::MacState {
+    fn from(s: MacStateData) -> Self {
+        Self {
+            name: s.name,
+            volume: s.volume,
+            muted: s.muted,
+            has_battery: s.has_battery,
+            battery: s.battery,
+            charging: s.charging,
+            ringing: s.ringing,
+            key_control: s.key_control,
         }
     }
 }
@@ -3173,6 +3357,35 @@ impl BregeNode {
     }
 
     /// Phone: tells the Macs where the controls stand.
+    /// Phone side: asks a Mac to ring, lock or change its volume.
+    pub fn send_mac_action(
+        &self,
+        device_id: String,
+        kind: MacActionKind,
+        value: i32,
+    ) -> Result<()> {
+        let action = proto::MacAction {
+            kind: kind.to_proto() as i32,
+            value,
+        };
+        Ok(self.node.send_mac_action(parse_id(&device_id)?, action)?)
+    }
+
+    /// Mac side: tells the phones what it wants them to do for it.
+    pub fn publish_watch_settings(&self, settings: WatchSettingsData) -> u32 {
+        self.node.publish_watch_settings(settings.into()) as u32
+    }
+
+    /// Mac side: something to show on the wrist.
+    pub fn publish_mac_alert(&self, alert: MacAlertData) -> u32 {
+        self.node.publish_mac_alert(alert.into()) as u32
+    }
+
+    /// Mac side: tells the connected phones how it stands.
+    pub fn publish_mac_state(&self, state: MacStateData) -> u32 {
+        self.node.publish_mac_state(state.into()) as u32
+    }
+
     /// Mac side: asks the phone what its sensors say.
     pub fn request_conditions(
         &self,

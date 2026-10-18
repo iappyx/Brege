@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated: the leaf above the bridge -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="1024" android:viewportHeight="1024">
+    <path android:fillColor="#FFFFFF" android:pathData="M375.4 522.3 C255.8 413.4 235.3 232.8 327.3 99.8 C377.6 27.2 469.9 4.0 533.5 48.0 C583.9 82.1 592.0 160.9 552.5 231.4 C546.2 240.5 548.5 252.9 557.5 259.2 C566.6 265.5 579.1 263.2 585.4 254.2 C637.4 192.3 714.1 172.2 763.7 207.4 C827.3 251.4 838.0 345.9 787.8 418.6 C695.7 551.6 519.4 595.9 375.4 522.3 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M40.0 780.0 L200.0 680.0 L824.0 680.0 L984.0 780.0 L984.0 870.0 L824.0 770.0 L200.0 770.0 L40.0 870.0 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M320.0 760.0 L406.0 760.0 L406.0 984.0 L320.0 984.0 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M618.0 760.0 L704.0 760.0 L704.0 984.0 L618.0 984.0 Z" />
+</vector>

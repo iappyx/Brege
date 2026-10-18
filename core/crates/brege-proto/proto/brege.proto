@@ -98,6 +98,10 @@ message Envelope {
     NotificationChannelUpdate notification_channel_update = 62;
     SensorsRequest   sensors_request  = 63;
     Conditions       conditions       = 64;
+    MacAction        mac_action       = 65;
+    MacState         mac_state        = 66;
+    WatchSettings    watch_settings   = 67;
+    MacAlert         mac_alert        = 68;
   }
   // 13 and 14 were placeholder SMS/call messages in early builds.
   reserved 13, 14;
@@ -796,4 +800,49 @@ message Conditions {
 
   bool has_accelerometer = 15;
   bool face_down = 16;
+}
+
+// --- The Mac as something to control, from the phone or the watch on your wrist -----------------
+
+message MacAction {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    RING = 1;                         // play a sound so you can find the Mac
+    LOCK = 2;                         // put the display to sleep; it locks if that is set
+    VOLUME = 3;                       // value: 0..100
+    MUTE = 4;                         // value: 1 mutes, 0 unmutes
+    STATE = 5;                        // just send the state back
+    // These send a key to whatever is in front on the Mac, which needs accessibility access.
+    MEDIA_PLAY_PAUSE = 6;
+    MEDIA_NEXT = 7;
+    MEDIA_PREVIOUS = 8;
+    SLIDE_NEXT = 9;
+    SLIDE_PREVIOUS = 10;
+  }
+  Kind kind = 1;
+  int32 value = 2;
+}
+
+// What the Mac wants the phone to do for it, set in Settings on the Mac.
+message WatchSettings {
+  bool lock_when_watch_away = 1;      // the watch leaves -> lock this Mac
+  bool alerts_on_watch = 2;           // send the Mac's own alerts to the wrist
+  bool key_control = 3;               // the Mac is allowed to act on media and slide keys
+}
+
+// Something the Mac wants to tell you while you are away from it.
+message MacAlert {
+  string title = 1;
+  string body = 2;
+}
+
+message MacState {
+  string name = 1;
+  uint32 volume = 2;                  // 0..100
+  bool muted = 3;
+  bool has_battery = 4;               // false on a desktop Mac
+  uint32 battery = 5;                 // 0..100
+  bool charging = 6;
+  bool ringing = 7;
+  bool key_control = 8;               // false when the Mac may not send keys (no accessibility)
 }

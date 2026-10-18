@@ -1009,6 +1009,28 @@ impl Node {
     }
 
     /// Phone side: tells the Macs where the controls stand.
+    /// Phone side: asks a Mac to ring, lock or change its volume.
+    pub fn send_mac_action(&self, mac: DeviceId, action: proto::MacAction) -> Result<()> {
+        let action = brege_features::mac::validate(&action)
+            .map_err(|e| CoreError::InvalidInput(e.to_string()))?;
+        self.inner.send_to(&mac, Payload::MacAction(action))
+    }
+
+    /// Mac side: tells the phones what it wants them to do for it.
+    pub fn publish_watch_settings(&self, settings: proto::WatchSettings) -> usize {
+        self.inner.broadcast(Payload::WatchSettings(settings))
+    }
+
+    /// Mac side: something to show on the wrist.
+    pub fn publish_mac_alert(&self, alert: proto::MacAlert) -> usize {
+        self.inner.broadcast(Payload::MacAlert(alert))
+    }
+
+    /// Mac side: tells the connected phones how it stands.
+    pub fn publish_mac_state(&self, state: proto::MacState) -> usize {
+        self.inner.broadcast(Payload::MacState(state))
+    }
+
     /// Mac side: asks the phone what its sensors say, with `history_hours` of pressure.
     /// `watch_motion` asks the phone to watch how it lies, which it otherwise does not.
     pub fn request_conditions(

@@ -156,6 +156,22 @@ pub(crate) async fn dispatch(inner: &std::sync::Arc<Inner>, from: DeviceId, payl
             crate::apps::truncate(&mut settings.app_label, 120);
             inner.emit(Event::NotificationSettingsReceived { from, settings });
         }
+        Payload::MacAction(action) => match brege_features::mac::validate(&action) {
+            Ok(action) => inner.emit(Event::MacActionRequested { from, action }),
+            Err(e) => tracing::info!("rejecting Mac action: {e}"),
+        },
+        Payload::WatchSettings(settings) => {
+            inner.emit(Event::WatchSettingsChanged { from, settings })
+        }
+        Payload::MacAlert(mut alert) => {
+            crate::apps::truncate(&mut alert.title, 120);
+            crate::apps::truncate(&mut alert.body, 400);
+            inner.emit(Event::MacAlertReceived { from, alert });
+        }
+        Payload::MacState(mut state) => {
+            crate::apps::truncate(&mut state.name, 60);
+            inner.emit(Event::MacStateChanged { from, state });
+        }
         Payload::SensorsRequest(request) => inner.emit(Event::ConditionsRequested {
             from,
             history_hours: request.history_hours.clamp(1, crate::apps::MAX_HISTORY_HOURS),

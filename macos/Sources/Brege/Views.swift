@@ -55,6 +55,21 @@ struct MenuContentView: View {
                         action: ("Open Settings", NotificationPresenter.openSettings))
             }
 
+            // The watch can ring this Mac; stopping it has to be possible from the Mac itself.
+            if model.macRinging {
+                HStack(spacing: 8) {
+                    Image(systemName: "speaker.wave.3.fill").foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("This Mac is ringing").font(.caption.weight(.semibold))
+                        Text("Asked for from your watch or phone.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button("Stop") { model.macActions.stopRinging() }
+                        .controlSize(.small)
+                }
+            }
+
             NetworkPrompts()
             if model.devices.isEmpty {
                 NoPhoneView()

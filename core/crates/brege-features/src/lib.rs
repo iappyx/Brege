@@ -5,6 +5,7 @@
 pub mod clipboard;
 pub mod codes;
 pub mod controls;
+pub mod mac;
 pub mod files;
 pub mod messages;
 pub mod notifications;

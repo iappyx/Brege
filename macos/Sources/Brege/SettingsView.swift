@@ -43,6 +43,7 @@ enum SettingsOpener {
         add("General", "gearshape", GeneralSettings())
         add("Phones", "iphone.gen3", PhoneSettings())
         add("Notifications", "bell.badge", NotificationSettings())
+        add("Watch", "applewatch", WatchSettings())
         add("Calls & Audio", "phone", CallsSettings())
         add("About", "info.circle", AboutSettings())
 
@@ -54,6 +55,80 @@ enum SettingsOpener {
         window.isReleasedWhenClosed = false
         window.center()
         return window
+    }
+}
+
+// MARK: - Watch
+
+/// What the watch on your wrist may do with this Mac, and what the Mac does when it leaves.
+private struct WatchSettings: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var model = AppModel.shared
+    @State private var keysAllowed = AppModel.shared.macActions.canSendKeys
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Lock this Mac when my watch leaves", isOn: Binding(
+                    get: { settings.lockWhenWatchAway },
+                    set: { settings.lockWhenWatchAway = $0; model.publishWatchSettings() }
+                ))
+            } header: {
+                Text("Walking away")
+            } footer: {
+                Caption("Your phone notices when the watch goes out of Bluetooth range and asks "
+                        + "this Mac to sleep. It waits half a minute, so stepping to the printer "
+                        + "does not lock you out. Coming back does not unlock: macOS asks for your "
+                        + "password, as it should.")
+            }
+
+            Section {
+                Toggle("Show this Mac's alerts on my watch", isOn: Binding(
+                    get: { settings.alertsOnWatch },
+                    set: { settings.alertsOnWatch = $0; model.publishWatchSettings() }
+                ))
+            } header: {
+                Text("On your wrist")
+            } footer: {
+                Caption("What Brêge itself knows: a file that finished arriving, this Mac's "
+                        + "battery running low, the phone going out of reach. macOS does not let "
+                        + "any app read other apps' notifications, so those cannot be mirrored.")
+            }
+
+            Section {
+                Toggle("Let the watch control playback and slides", isOn: Binding(
+                    get: { settings.watchKeyControl },
+                    set: {
+                        settings.watchKeyControl = $0
+                        if $0, !model.macActions.canSendKeys { model.macActions.askForKeyControl() }
+                        model.publishWatchSettings()
+                    }
+                ))
+                if settings.watchKeyControl, !keysAllowed {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                        Text("Waiting for Accessibility access.").font(.caption)
+                        Spacer()
+                        Button("Open Settings") {
+                            NSWorkspace.shared.open(URL(string:
+                                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            } header: {
+                Text("Playback and slides")
+            } footer: {
+                Caption("Play, pause, skip and the arrow keys are pressed on your behalf, which "
+                        + "macOS only allows under Privacy & Security › Accessibility. Everything "
+                        + "else the watch does needs no permission at all.")
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { keysAllowed = model.macActions.canSendKeys }
+        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
+            keysAllowed = model.macActions.canSendKeys
+        }
     }
 }
 

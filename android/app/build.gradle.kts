@@ -59,6 +59,7 @@ dependencies {
     implementation(libs.compose.material.icons)
     implementation(libs.play.code.scanner)
     implementation(libs.play.document.scanner)
+    implementation(libs.play.wearable)
     implementation(libs.kotlinx.coroutines.android)
     // UniFFI's Kotlin bindings load the Rust library through JNA.
     implementation("${libs.jna.get().module}:${libs.jna.get().version}@aar")

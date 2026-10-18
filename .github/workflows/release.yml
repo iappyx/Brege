@@ -75,6 +75,13 @@ jobs:
           (\`scripts/build-core-android.sh\`, then \`./gradlew assembleDebug\`), then pair the two:
           **Pair a Phone…** on the Mac, **Scan pairing code** on the phone.
 
+          **The watch, if you have one**
+
+          The same build produces an optional Wear OS app
+          (\`android/wear/build/outputs/apk/debug/wear-debug.apk\`) for ringing and locking this Mac,
+          its volume, and playback and slide control. Install it over wireless debugging and add the
+          Brêge tile; it reaches the Mac through the phone and needs no pairing of its own.
+
           **After an update**
 
           Each build has its own signature, so macOS treats an updated Brêge as a new app: it asks

@@ -124,6 +124,26 @@ pub enum Event {
         from: DeviceId,
         state: proto::MicState,
     },
+    /// Mac side: a phone (or the watch behind it) asks this Mac to ring, lock or change volume.
+    MacActionRequested {
+        from: DeviceId,
+        action: proto::MacAction,
+    },
+    /// Phone side: what the Mac asks the phone to do for it (watch rules).
+    WatchSettingsChanged {
+        from: DeviceId,
+        settings: proto::WatchSettings,
+    },
+    /// Phone side: something the Mac wants to say while you are away from it.
+    MacAlertReceived {
+        from: DeviceId,
+        alert: proto::MacAlert,
+    },
+    /// Phone side: how the Mac stands — volume, battery, whether it is ringing.
+    MacStateChanged {
+        from: DeviceId,
+        state: proto::MacState,
+    },
     /// Mac side: what the phone's sensors report — pressure, light, warmth, how it lies.
     ConditionsChanged {
         from: DeviceId,

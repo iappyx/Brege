@@ -69,6 +69,10 @@ final class AppModel: ObservableObject {
     private let callPanel = CallPanelController()
     private let drives = PhoneDriveController()
     let microphone = PhoneMicrophone()
+    /// Ring, lock and volume, asked for by a phone or the watch behind it.
+    let macActions = MacActions()
+    /// Mirrored here because a view watches this model, not the one inside it.
+    @Published private(set) var macRinging = false
     /// Device id whose microphone is in use, and a status line for the menu.
     @Published private(set) var micDevice: String? {
         didSet { microphone.playingFrom = micDevice }
@@ -109,6 +113,46 @@ final class AppModel: ObservableObject {
 
     /// Remembers the phone an action was started for.
     func used(_ deviceId: String) { lastUsedDevice = deviceId }
+
+    /// Tells the phones what this Mac wants them to do for it: lock when the watch leaves, pass
+    /// alerts to the wrist, allow playback keys. Sent when it changes and after every connect.
+    func publishWatchSettings() {
+        guard let node else { return }
+        let settings = AppSettings.shared
+        _ = node.publishWatchSettings(settings: WatchSettingsData(
+            lockWhenWatchAway: settings.lockWhenWatchAway,
+            alertsOnWatch: settings.alertsOnWatch,
+            keyControl: settings.watchKeyControl && macActions.canSendKeys
+        ))
+    }
+
+    private var batteryWatch: Timer?
+    private var warnedAboutOwnBattery = false
+
+    /// Warns once per discharge about this Mac's own battery, on the wrist only.
+    private func checkOwnBattery() {
+        let state = macActions.state(name: "")
+        guard state.hasBattery else { return }
+        if state.charging || state.battery > 15 {
+            warnedAboutOwnBattery = false
+            return
+        }
+        guard !warnedAboutOwnBattery else { return }
+        warnedAboutOwnBattery = true
+        alertWatch("This Mac is low", "\(state.battery)% left, not charging")
+    }
+
+    /// Something worth a buzz on the wrist while you are away from this Mac.
+    func alertWatch(_ title: String, _ body: String) {
+        guard let node, AppSettings.shared.alertsOnWatch else { return }
+        _ = node.publishMacAlert(alert: MacAlertData(title: title, body: body))
+    }
+
+    /// Tells the phones how this Mac stands, which is what the watch shows.
+    func publishMacState() {
+        guard let node else { return }
+        _ = node.publishMacState(state: macActions.state(name: Host.current().localizedName ?? "Mac"))
+    }
 
     // --- folded phones ---------------------------------------------------------------------
     // With three phones the menu grows taller than the screen, so a phone can be folded to its
@@ -154,6 +198,15 @@ final class AppModel: ObservableObject {
 
     func start() async {
         guard node == nil else { return }
+        // The wrist is the only place you would see this while the Mac is across the room.
+        batteryWatch = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
+            Task { @MainActor [weak self] in self?.checkOwnBattery() }
+        }
+        macActions.onStateChanged = { [weak self] in
+            guard let self else { return }
+            macRinging = macActions.ringing
+            publishMacState()
+        }
         do {
             let secrets = try Secrets.loadOrCreate()
             let support = try FileManager.default.url(
@@ -996,8 +1049,19 @@ final class AppModel: ObservableObject {
         case .networkPathsChanged:
             refreshNetworkPaths()
             restartBonjour()
+        case let .macActionRequested(_, kind, value):
+            macActions.perform(kind, value: value)
+            publishMacState()
+        case let .macStateChanged(from, state):
+            // Only a Mac acts on these; a phone would, but this is the Mac.
+            _ = (from, state)
+        case .watchSettingsChanged, .macAlertReceived:
+            break // the phone acts on these, not the Mac
         case let .peerConnected(deviceId, _):
             refresh()
+            // The watch shows this Mac's volume and battery, so a fresh state goes out at once.
+            publishMacState()
+            publishWatchSettings()
             messageModels[deviceId]?.resetPhotoRequests()
             // Recent calls, so the list and the missed badge are current without opening the window.
             let callsModel = calls(for: deviceId)
@@ -1048,6 +1112,7 @@ final class AppModel: ObservableObject {
             upsertTransfer(id: id) { $0.done = true; $0.bytes = $0.total }
             if incoming, !capture.transferCompleted(id: id, path: path, from: from) {
                 presenter.showFileReceived(path: path)
+                alertWatch("File arrived", (path as NSString).lastPathComponent)
             }
         case let .transferFailed(_, id, reason, _):
             upsertTransfer(id: id) { $0.failed = reason }
