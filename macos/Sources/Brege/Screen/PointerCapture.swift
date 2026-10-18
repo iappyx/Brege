@@ -69,16 +69,14 @@ final class PointerCapture {
     @discardableResult
     func beginCapture() -> Bool {
         guard !isCapturing else { return true }
-        let events: CGEventMask =
-            (1 << CGEventType.mouseMoved.rawValue) |
-            (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.leftMouseUp.rawValue) |
-            (1 << CGEventType.rightMouseDown.rawValue) | (1 << CGEventType.rightMouseUp.rawValue) |
-            (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue) |
-            (1 << CGEventType.leftMouseDragged.rawValue) | (1 << CGEventType.rightMouseDragged.rawValue) |
-            (1 << CGEventType.otherMouseDragged.rawValue) |
-            (1 << CGEventType.scrollWheel.rawValue) |
-            (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) |
-            (1 << CGEventType.flagsChanged.rawValue)
+        // Listed rather than or-ed together: the type checker gives up on a long chain of shifts.
+        let wanted: [CGEventType] = [
+            .mouseMoved, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+            .otherMouseDown, .otherMouseUp, .leftMouseDragged, .rightMouseDragged,
+            .otherMouseDragged, .scrollWheel, .keyDown, .keyUp, .flagsChanged,
+        ]
+        var events: CGEventMask = 0
+        for type in wanted { events |= CGEventMask(1) << CGEventMask(type.rawValue) }
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,

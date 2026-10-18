@@ -619,7 +619,7 @@ final class AppModel: ObservableObject {
         session.onScreenSize = { [weak self] width, _ in
             Task { @MainActor in self?.pointerCapture.phoneWidth = width }
         }
-        session.onReady = { [weak self] in
+        session.onReady = { [weak self, weak session] in
             Task { @MainActor in
                 guard let self else { return }
                 self.pointerCapture.send = { [weak session] report in session?.send(report) }

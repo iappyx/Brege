@@ -174,7 +174,9 @@ pub(crate) async fn dispatch(inner: &std::sync::Arc<Inner>, from: DeviceId, payl
         }
         Payload::SensorsRequest(request) => inner.emit(Event::ConditionsRequested {
             from,
-            history_hours: request.history_hours.clamp(1, crate::apps::MAX_HISTORY_HOURS),
+            history_hours: request
+                .history_hours
+                .clamp(1, crate::apps::MAX_HISTORY_HOURS),
             watch_motion: request.watch_motion,
         }),
         Payload::Conditions(mut conditions) => {
