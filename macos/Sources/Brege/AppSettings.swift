@@ -13,6 +13,7 @@ final class AppSettings: ObservableObject {
     @Published var alertsOnWatch: Bool { didSet { save(alertsOnWatch, "alertsOnWatch") } }
     @Published var watchKeyControl: Bool { didSet { save(watchKeyControl, "watchKeyControl") } }
     @Published var lowBatteryAlert: Bool { didSet { save(lowBatteryAlert, "lowBatteryAlert") } }
+    @Published var idleWirelessDebugging: Bool { didSet { save(idleWirelessDebugging, "idleWirelessDebugging") } }
     @Published var lowBatteryThreshold: Int { didSet { save(lowBatteryThreshold, "lowBatteryThreshold") } }
     @Published var fullBatteryAlert: Bool { didSet { save(fullBatteryAlert, "fullBatteryAlert") } }
 
@@ -31,6 +32,7 @@ final class AppSettings: ObservableObject {
         alertsOnWatch = d.object(forKey: "alertsOnWatch") as? Bool ?? false
         watchKeyControl = d.object(forKey: "watchKeyControl") as? Bool ?? false
         lowBatteryAlert = d.object(forKey: "lowBatteryAlert") as? Bool ?? true
+        idleWirelessDebugging = d.object(forKey: "idleWirelessDebugging") as? Bool ?? true
         lowBatteryThreshold = d.object(forKey: "lowBatteryThreshold") as? Int ?? 15
         fullBatteryAlert = d.object(forKey: "fullBatteryAlert") as? Bool ?? false
     }

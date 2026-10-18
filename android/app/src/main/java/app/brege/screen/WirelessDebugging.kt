@@ -38,6 +38,16 @@ object WirelessDebugging {
             .getOrDefault(false)
     }
 
+    /** Switched off again once nothing has used adb for a while, so the phone is not left open. */
+    fun switchOff(context: Context): Boolean {
+        if (!isOn(context)) return true
+        if (!canSwitchOn(context)) return false
+        return runCatching {
+            Settings.Global.putInt(context.contentResolver, ADB_WIFI_ENABLED, 0)
+        }.onSuccess { UptimeLog.record("screen: switched wireless debugging off again") }
+            .getOrDefault(false)
+    }
+
     /** Developer options when enabled, else About phone (tap Build number seven times). */
     fun openSettings(context: Context) {
         val action = if (developerOptionsEnabled(context)) {

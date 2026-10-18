@@ -70,6 +70,10 @@ or the phone will not connect.
 **Screen, camera and audio**
 - Mirror and control the phone's screen, or open a single phone app in its own window
   (uses the phone's wireless debugging; you install `adb` yourself).
+- Use the Mac's mouse and keyboard on the phone itself, with nothing mirrored: push the pointer
+  against the edge of the Mac's screen and it crosses over, and off the far side of the phone to
+  come back. The phone sees an ordinary mouse and keyboard, so its own pointer appears and the
+  status bar, the launcher and games all answer to it.
 - Use the phone's camera in a window on the Mac, and record video with sound.
 - Use the phone as a microphone for any Mac app ("Brêge Microphone").
 - Media controls for music on the phone; ring the phone to find it.
@@ -167,8 +171,13 @@ Brêge has no server, no account and no analytics. Phone and Mac talk to each ot
     a random host name instead of your Mac's, and carries only rotating ids that change every 15
     minutes and that only your paired phone can recognise; the host name changes along with them.
     The phone's Bluetooth presence signal rotates the same way.
-- **adb stays optional.** Only the phone screen and app windows use wireless debugging; every other
-  feature works without developer options.
+- **adb stays optional.** Only the phone screen, app windows and the pointer use wireless debugging;
+  every other feature works without developer options.
+- **Wireless debugging does not stay open.** Five minutes after the last window that needs it closes,
+  the Mac asks the phone to switch it off again, so the phone stops advertising it to the network.
+  The phone switches it back on by itself when the Mac next needs it, over Brêge's own connection
+  rather than adb — so it can only ever be switched off while there is a way to switch it back on.
+  Turn this off under Settings › Phone Screen if you would rather it stayed on.
 
 ## Requirements
 
@@ -217,8 +226,9 @@ then asks for Keychain access again after each rebuild.
 3. On the phone, work through the setup card: link the phone to the Mac, allow notification access
    and the permissions for the features you want (messages, calls, photos).
 4. Optional:
-   - **Phone screen and app windows:** turn on wireless debugging on the phone; Brêge walks you
-     through pairing `adb` once.
+   - **Phone screen, app windows and the pointer:** turn on wireless debugging on the phone; Brêge
+     walks you through pairing `adb` once. The pointer also needs Brêge allowed under System
+     Settings › Privacy & Security › Accessibility, so macOS lets it read the mouse and keyboard.
    - **Phone hotspot:** choose the phone's hotspot network in Settings › Phones.
    - **Microphone:** click Microphone on the phone in the menu; Brêge installs its audio device once.
    - **Wi‑Fi names on the phone:** "Show Wi‑Fi names" in the phone app's Networks card.
@@ -250,7 +260,10 @@ a paid Apple developer account), and speakerphone control from the Mac.
 Tried and dropped: the watch as a Bluetooth mouse. It worked, but the link to the Mac goes quiet for
 about a fifth of a second at a time, so the cursor arrives in steps rather than moving. Measurement
 ruled out the report rate, the quality-of-service request, Wi‑Fi and the phone's own Bluetooth; the
-interval is set by the link policy, which Android does not expose to apps.
+interval is set by the link policy, which Android does not expose to apps. The Mac going the other
+way, as a Bluetooth mouse for the phone, does not work either: macOS advertises such a service from
+the Mac's dual-mode address, so Android pairs over the classic transport instead, where no input
+service exists. The pointer feature above takes the wireless debugging route for that reason.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 

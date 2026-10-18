@@ -686,6 +686,7 @@ message Command {
     MIC_START = 6;                  // Mac asks the phone to act as its microphone
     MIC_STOP = 7;
     ENABLE_WIRELESS_DEBUGGING = 8;  // phone screen; needs WRITE_SECURE_SETTINGS granted over adb
+    DISABLE_WIRELESS_DEBUGGING = 9; // switched off again once nothing has used adb for a while
   }
   Kind kind = 1;
 }

@@ -57,6 +57,7 @@ object EventHandler {
                 CommandKind.MIC_START -> MicService.requestFromMac(context, event.from)
                 CommandKind.MIC_STOP -> MicService.stopFromMac(context, event.from)
                 CommandKind.ENABLE_WIRELESS_DEBUGGING -> WirelessDebugging.switchOn(context)
+                CommandKind.DISABLE_WIRELESS_DEBUGGING -> WirelessDebugging.switchOff(context)
                 else -> MediaBridge.command(event.command)
             }
             is BregeEvent.OpenRequestReceived -> showOpenRequest(context, event.request)

@@ -103,6 +103,28 @@ final class ScreenSession: @unchecked Sendable {
     /// Whether the current attempt received a video frame (session thread only).
     private var videoFrameArrived = false
 
+    /// How many sessions are using adb right now, so wireless debugging can be switched off once
+    /// nothing needs it (see AppModel).
+    private static let activeLock = NSLock()
+    private static var activeCount = 0
+    private var counted = false
+
+    static var isUsingAdb: Bool {
+        activeLock.lock()
+        defer { activeLock.unlock() }
+        return activeCount > 0
+    }
+
+    private func countAsActive(_ active: Bool) {
+        lock.lock()
+        guard counted != active else { lock.unlock(); return }
+        counted = active
+        lock.unlock()
+        Self.activeLock.lock()
+        Self.activeCount += active ? 1 : -1
+        Self.activeLock.unlock()
+    }
+
     init(adb: Adb, phoneIP: String, display: VirtualDisplay? = nil, desktop: DesktopDisplay? = nil) {
         self.adb = adb
         self.phoneIP = phoneIP
@@ -266,6 +288,7 @@ final class ScreenSession: @unchecked Sendable {
         let video = try connectFirstSocket(port: port, server: server, log: log)
         let audio = withAudio ? try TunnelSocket(port: port) : nil
         let control = try TunnelSocket(port: port)
+        countAsActive(true)
         lock.lock()
         sockets = [video, control] + (audio.map { [$0] } ?? [])
         self.control = control
@@ -504,6 +527,7 @@ final class ScreenSession: @unchecked Sendable {
     }
 
     private func teardown() {
+        countAsActive(false)
         lock.lock()
         let sockets = sockets
         let server = server

@@ -202,6 +202,9 @@ final class AppModel: ObservableObject {
         batteryWatch = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
             Task { @MainActor [weak self] in self?.checkOwnBattery() }
         }
+        adbIdleWatch = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            Task { @MainActor [weak self] in self?.checkAdbIdle() }
+        }
         macActions.onStateChanged = { [weak self] in
             guard let self else { return }
             macRinging = macActions.ringing
@@ -544,6 +547,110 @@ final class AppModel: ObservableObject {
         node?.isValidPackageName(package: package) ?? false
     }
 
+    // MARK: - Wireless debugging
+
+    /// Wireless debugging stays on between sessions so the phone screen and the pointer start
+    /// without a wait. Nothing needing adb for a while means it can go off again: the phone
+    /// switches it back on by itself when the Mac next asks, over Brêge's own link.
+    private static let adbIdleTimeout: TimeInterval = 300
+
+    private var adbIdleWatch: Timer?
+    private var adbIdleSince: Date?
+    private var adbSwitchedOff = false
+
+    private func checkAdbIdle() {
+        guard AppSettings.shared.idleWirelessDebugging else { return }
+        // Any screen, app or desktop window counts, not only the pointer: switching adb off under
+        // a running session would cut it off mid-use.
+        if ScreenSession.isUsingAdb || pointerSession != nil {
+            adbIdleSince = nil
+            adbSwitchedOff = false
+            return
+        }
+        guard !adbSwitchedOff else { return }
+        guard let since = adbIdleSince else { return adbIdleSince = Date() }
+        guard Date().timeIntervalSince(since) >= Self.adbIdleTimeout else { return }
+        switchOffWirelessDebugging()
+        adbSwitchedOff = true
+        adbIdleSince = nil
+    }
+
+    /// Asks every connected phone to switch wireless debugging off; one that has it off already
+    /// does nothing. Only ever sent over a working link, which is also what switches it back on.
+    private func switchOffWirelessDebugging() {
+        for device in devices where device.connected {
+            try? node?.sendCommand(deviceId: device.id, command: .disableWirelessDebugging)
+        }
+    }
+
+    // MARK: - Phone pointer
+
+    /// The phone currently holding this Mac's pointer and keyboard, if any.
+    @Published private(set) var pointerDevice: String?
+    /// True while the phone has the pointer, as opposed to only waiting at the edge.
+    @Published private(set) var pointerCaptured = false
+
+    private var pointerSession: PointerSession?
+    private let pointerCapture = PointerCapture()
+
+    /// Hands this Mac's pointer and keyboard to the phone, or gives them back.
+    func togglePhonePointer(for device: Device) {
+        if pointerDevice == device.id { return stopPhonePointer() }
+        stopPhonePointer()
+        guard macActions.canSendKeys else {
+            showNotice("Brêge needs Accessibility access",
+                       "Allow Brêge under Privacy & Security › Accessibility, then try again. "
+                       + "Without it macOS does not let Brêge read the pointer and keys.")
+            macActions.askForKeyControl()
+            return
+        }
+        guard let adb = Adb.locate() else {
+            showError("Could not reach the phone", Adb.Failure.notInstalled)
+            return
+        }
+        guard let ip = phoneIP(deviceId: device.id) else {
+            showNotice("The phone is not reachable", "Brêge needs the phone connected on this network.")
+            return
+        }
+        let session = PointerSession(adb: adb, phoneIP: ip)
+        session.switchOnWirelessDebugging = { [weak self] in
+            DispatchQueue.main.sync { self?.switchOnWirelessDebugging(deviceId: device.id) ?? false }
+        }
+        session.onScreenSize = { [weak self] width, _ in
+            Task { @MainActor in self?.pointerCapture.phoneWidth = width }
+        }
+        session.onReady = { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.pointerCapture.send = { [weak session] report in session?.send(report) }
+                self.pointerCapture.onCaptureChanged = { [weak self] capturing in
+                    Task { @MainActor in self?.pointerCaptured = capturing }
+                }
+                self.pointerCapture.startWatchingEdge()
+            }
+        }
+        session.onEnd = { [weak self] error in
+            Task { @MainActor in
+                guard let self, self.pointerDevice == device.id else { return }
+                self.stopPhonePointer()
+                if let error { self.showError("The phone pointer stopped", error) }
+            }
+        }
+        pointerSession = session
+        pointerDevice = device.id
+        session.start()
+    }
+
+    func stopPhonePointer() {
+        pointerCapture.endCapture()
+        pointerCapture.stopWatchingEdge()
+        pointerCapture.send = nil
+        pointerSession?.stop()
+        pointerSession = nil
+        pointerDevice = nil
+        pointerCaptured = false
+    }
+
     /// Asks the phone to switch wireless debugging on (it can once the Mac granted it permission).
     func switchOnWirelessDebugging(deviceId: String) -> Bool {
         (try? node?.sendCommand(deviceId: deviceId, command: .enableWirelessDebugging)) != nil
@@ -589,6 +696,13 @@ final class AppModel: ObservableObject {
         micStatus = nil
     }
 
+    private func showNotice(_ title: String, _ detail: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = detail
+        ModalAlert.show(alert)
+    }
+
     private func showError(_ title: String, _ error: Error) {
         let alert = NSAlert()
         alert.messageText = title
@@ -597,6 +711,9 @@ final class AppModel: ObservableObject {
     }
 
     func stopSync() {
+        if AppSettings.shared.idleWirelessDebugging, !ScreenSession.isUsingAdb, pointerSession == nil {
+            switchOffWirelessDebugging()
+        }
         stopMicrophone()
         drives.ejectAll(node: node)
         clipboard.stop()

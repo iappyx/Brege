@@ -368,6 +368,7 @@ pub enum CommandKind {
     MicStart,
     MicStop,
     EnableWirelessDebugging,
+    DisableWirelessDebugging,
 }
 
 impl From<CommandKind> for proto::command::Kind {
@@ -381,6 +382,7 @@ impl From<CommandKind> for proto::command::Kind {
             CommandKind::MicStart => Self::MicStart,
             CommandKind::MicStop => Self::MicStop,
             CommandKind::EnableWirelessDebugging => Self::EnableWirelessDebugging,
+            CommandKind::DisableWirelessDebugging => Self::DisableWirelessDebugging,
         }
     }
 }
@@ -812,6 +814,9 @@ fn convert_event(event: Event) -> Option<BregeEvent> {
                 proto::command::Kind::MicStop => CommandKind::MicStop,
                 proto::command::Kind::EnableWirelessDebugging => {
                     CommandKind::EnableWirelessDebugging
+                }
+                proto::command::Kind::DisableWirelessDebugging => {
+                    CommandKind::DisableWirelessDebugging
                 }
                 proto::command::Kind::Unspecified => return None,
             },

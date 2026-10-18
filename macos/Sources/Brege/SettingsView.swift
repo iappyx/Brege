@@ -312,6 +312,14 @@ private struct NotificationSettings: View {
                 Caption("A screenshot taken on the phone lands on this Mac's clipboard, with a preview you can drag.")
             }
 
+            Section {
+                Toggle("Switch wireless debugging off when idle", isOn: $settings.idleWirelessDebugging)
+            } header: {
+                Text("Phone Screen")
+            } footer: {
+                Caption("Five minutes after the last screen or pointer window closes, the phone switches wireless debugging off again, so it does not stay open to the network. It comes back on by itself the next time this Mac needs it.")
+            }
+
             Section("Phone Battery") {
                 Toggle("Alert when the battery is low", isOn: $settings.lowBatteryAlert)
                 Picker("Low battery level", selection: $settings.lowBatteryThreshold) {
