@@ -102,6 +102,12 @@ message Envelope {
     MacState         mac_state        = 66;
     WatchSettings    watch_settings   = 67;
     MacAlert         mac_alert        = 68;
+    DisplayOffer     display_offer    = 69;
+    DisplayStop      display_stop     = 70;
+    DisplayCapabilities display_capabilities = 71;
+    DisplayKeyframeRequest display_keyframe_request = 72;
+    DisplayPointer   display_pointer  = 73;
+    DisplayInputMode display_input_mode = 74;
   }
   // 13 and 14 were placeholder SMS/call messages in early builds.
   reserved 13, 14;
@@ -846,4 +852,63 @@ message MacState {
   bool charging = 6;
   bool ringing = 7;
   bool key_control = 8;               // false when the Mac may not send keys (no accessibility)
+}
+
+// Second display: the Mac's own screen shown on a tablet (docs/brege-second-display-plan.md).
+// Frames travel on a DISPLAY stream, framed exactly as camera video is.
+message DisplayOffer {
+  string codec = 1;                 // "h264" or "h265"
+  uint32 width = 2;                 // pixels the Mac will send
+  uint32 height = 3;
+  uint32 refresh_hz = 4;
+  uint32 scale = 5;                 // 1, or 2 for HiDPI so text stays crisp
+}
+
+// The display session is over, in whichever direction it is sent: the Mac has taken the display
+// away, or the tablet has stopped showing it. `reason` is empty when it was simply switched off,
+// and otherwise says what to tell the user ("the tablet is showing another Mac").
+message DisplayStop {
+  string reason = 1;
+}
+
+// How the tablet should read touch: as a touchscreen (where you touch is where the pointer goes)
+// or as a trackpad (the pointer moves from where it is). The Mac owns this, because that is where
+// its owner is when they decide — the tablet is showing a screen with nothing to tap on.
+message DisplayInputMode {
+  bool trackpad = 1;
+}
+
+// Touch on the tablet, as a pointer on the Mac's second display. Coordinates are fractions of the
+// display rather than pixels, so neither side needs to know the other's geometry.
+message DisplayPointer {
+  DisplayPointerPhase phase = 1;
+  float x = 2;                      // 0…1 across the display; ignored when relative
+  float y = 3;                      // 0…1 down the display; ignored when relative
+  float dx = 4;                     // the scroll, or the movement when relative, as a fraction
+  float dy = 5;
+  // Trackpad rather than touchscreen: move the cursor from wherever it is by dx and dy, and press
+  // and scroll where it then is, instead of going to x and y. For a tablet beside the keyboard,
+  // where what your finger lands on says nothing about what you meant to point at.
+  bool relative = 6;
+}
+
+enum DisplayPointerPhase {
+  DISPLAY_POINTER_PHASE_UNSPECIFIED = 0;
+  DISPLAY_POINTER_DOWN = 1;
+  DISPLAY_POINTER_MOVE = 2;
+  DISPLAY_POINTER_UP = 3;
+  DISPLAY_POINTER_SCROLL = 4;
+}
+
+// The tablet has nothing to decode from — it has just started, or lost frames — and needs the
+// next frame to be one it can start at.
+message DisplayKeyframeRequest {}
+
+// What the tablet's own screen and decoder can take, so the Mac does not have to guess.
+message DisplayCapabilities {
+  uint32 width = 1;                 // the tablet's screen in pixels
+  uint32 height = 2;
+  uint32 density_dpi = 3;
+  bool h265 = 4;                    // whether its decoder takes H.265 as well as H.264
+  uint32 max_refresh_hz = 5;
 }

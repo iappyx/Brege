@@ -160,6 +160,35 @@ pub enum Event {
         from: DeviceId,
         state: proto::PhoneControlState,
     },
+    /// Phone side: the Mac is about to send its second display.
+    DisplayOffered {
+        from: DeviceId,
+        offer: proto::DisplayOffer,
+    },
+    /// The display session is over: the Mac took it away, or the tablet stopped showing it.
+    DisplayStopped {
+        from: DeviceId,
+        reason: String,
+    },
+    /// Phone side: how the Mac wants touch read — as a touchscreen, or as a trackpad.
+    DisplayInputModeSet {
+        from: DeviceId,
+        trackpad: bool,
+    },
+    /// Mac side: touch on the tablet, to act on the second display.
+    DisplayPointerReceived {
+        from: DeviceId,
+        pointer: proto::DisplayPointer,
+    },
+    /// Mac side: the tablet needs a frame it can start decoding at.
+    DisplayKeyframeRequested {
+        from: DeviceId,
+    },
+    /// Mac side: what the tablet's screen and decoder can take.
+    DisplayCapabilitiesReported {
+        from: DeviceId,
+        capabilities: proto::DisplayCapabilities,
+    },
     CameraRequested {
         from: DeviceId,
         request: proto::CameraRequest,

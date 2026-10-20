@@ -74,6 +74,11 @@ or the phone will not connect.
   against the edge of the Mac's screen and it crosses over, and off the far side of the phone to
   come back. The phone sees an ordinary mouse and keyboard, so its own pointer appears and the
   status bar, the launcher and games all answer to it.
+- Use an Android tablet as a second display of this Mac: it joins the display arrangement like any
+  monitor, at the tablet's own resolution, and a window dragged onto it appears there. Needs Screen
+  Recording in Privacy & Security. Protected video (streaming services) will not play on the Mac
+  while a display is on: screen recording blocks it, and a display Brêge makes cannot carry the
+  protection those services require.
 - Use the phone's camera in a window on the Mac, and record video with sound.
 - Use the phone as a microphone for any Mac app ("Brêge Microphone").
 - Media controls for music on the phone; ring the phone to find it.

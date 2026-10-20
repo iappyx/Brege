@@ -11,6 +11,7 @@ import app.brege.discovery.NetworkPaths
 import app.brege.hotspot.HotspotRequests
 import app.brege.notifications.BregeNotificationListener
 import app.brege.security.SecretStore
+import app.brege.display.MacDisplay
 import app.brege.storage.SafStorage
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -127,6 +128,7 @@ object Core {
             runCatching { NetworkPaths.report(appContext) }
                 .onFailure { Log.w(TAG, "network report failed", it) }
             started.setPhoneStorage(SafStorage(appContext))
+            started.setDisplayListener(MacDisplay)
             this.started.set(true)
             refreshDevices()
             UptimeLog.record("core started, id ${started.shortId()}")
@@ -158,6 +160,7 @@ object Core {
                 app.brege.sensors.Conditions.publish()
                 Handler(Looper.getMainLooper()).post { BregeNotificationListener.publishOngoingActivities() }
                 HotspotRequests.onPeerConnected(appContext, event.deviceId)
+                MacDisplay.reportCapabilities(appContext, event.deviceId)
             }
             if (event is BregeEvent.PeerConnected || event is BregeEvent.PeerDisconnected) {
                 app.brege.companion.PresenceBeacon.update(appContext)

@@ -24,9 +24,17 @@ let package = Package(
                 .linkedFramework("SystemConfiguration"),
             ]
         ),
+        // The private CoreGraphics display interface, kept in a target of its own so Brêge's
+        // dependency on it is one small, replaceable piece (see Sources/VirtualDisplay).
+        .target(
+            name: "VirtualDisplay",
+            path: "Sources/VirtualDisplay",
+            publicHeadersPath: "include",
+            linkerSettings: [.linkedFramework("CoreGraphics")]
+        ),
         .executableTarget(
             name: "Brege",
-            dependencies: ["BregeCore"],
+            dependencies: ["BregeCore", "VirtualDisplay"],
             path: "Sources/Brege",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

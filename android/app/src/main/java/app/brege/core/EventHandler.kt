@@ -24,6 +24,7 @@ import app.brege.calls.CallMonitor
 import app.brege.camera.CameraService
 import app.brege.capture.CaptureActivity
 import app.brege.companion.CompanionSetup
+import app.brege.display.MacDisplay
 import app.brege.diagnostics.UptimeLog
 import app.brege.media.MediaBridge
 import app.brege.apps.AppInventory
@@ -61,6 +62,20 @@ object EventHandler {
                 else -> MediaBridge.command(event.command)
             }
             is BregeEvent.OpenRequestReceived -> showOpenRequest(context, event.request)
+            is BregeEvent.DisplayOffered -> MacDisplay.offered(
+                context,
+                MacDisplay.Offer(
+                    from = event.from,
+                    codec = event.codec,
+                    width = event.width.toInt(),
+                    height = event.height.toInt(),
+                    refreshHz = event.refreshHz.toInt(),
+                    scale = event.scale.toInt(),
+                ),
+            )
+            is BregeEvent.DisplayStopped -> MacDisplay.stopped(context, event.from)
+            is BregeEvent.DisplayInputModeSet -> MacDisplay.setInputMode(event.trackpad)
+            is BregeEvent.PeerDisconnected -> MacDisplay.macGone(context, event.deviceId)
             is BregeEvent.TransferCompleted ->
                 if (event.incoming) showFileReceived(context, File(event.path)) else ShareActivity.sent(context, File(event.path))
             is BregeEvent.MessageSyncRequested -> Core.scope.launch {

@@ -78,9 +78,7 @@ final class PhoneScreenModel: ObservableObject {
         fittedToWindow = false
         decoder.resetFrames()
         let session = ScreenSession(adb: adb, phoneIP: ip, display: display, desktop: desktop)
-        session.switchOnWirelessDebugging = {
-            DispatchQueue.main.sync { AppModel.shared.switchOnWirelessDebugging(deviceId: deviceId) }
-        }
+        session.switchOnWirelessDebugging = AppModel.shared.wirelessDebuggingSwitch(deviceId: deviceId)
         let decoder = decoder
         let audio = audio
         decoder.onNeedsKeyFrame = { [weak session] in session?.send(ScreenControl.resetVideo()) }

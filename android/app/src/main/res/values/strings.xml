@@ -5,4 +5,6 @@
     <string name="tile_send_clipboard">Send clipboard</string>
     <string name="channel_service">Connection</string>
     <string name="channel_events">Files, links and alerts</string>
+    <string name="display_offer_title">Show the Mac\'s display</string>
+    <string name="display_offer_text">Tap to use this tablet as a second display</string>
 </resources>

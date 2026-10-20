@@ -364,6 +364,9 @@ async fn stream_acceptor(inner: Arc<Inner>, conn: Connection) {
                 }
                 Ok(Ok(Some(StreamType::Fs))) => files::serve(inner, send, recv).await,
                 Ok(Ok(Some(StreamType::Video))) => crate::video::receive(inner, peer, recv).await,
+                Ok(Ok(Some(StreamType::Display))) => {
+                    crate::display::receive(inner, peer, recv).await
+                }
                 kind => {
                     tracing::debug!(?kind, "ignoring unsupported stream");
                     let _ = send.reset(0u32.into());

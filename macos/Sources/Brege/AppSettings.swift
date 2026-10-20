@@ -14,6 +14,15 @@ final class AppSettings: ObservableObject {
     @Published var watchKeyControl: Bool { didSet { save(watchKeyControl, "watchKeyControl") } }
     @Published var lowBatteryAlert: Bool { didSet { save(lowBatteryAlert, "lowBatteryAlert") } }
     @Published var idleWirelessDebugging: Bool { didSet { save(idleWirelessDebugging, "idleWirelessDebugging") } }
+    @Published var pointerBanner: Bool { didSet { save(pointerBanner, "pointerBanner") } }
+    @Published var displayTrackpad: Bool {
+        didSet {
+            save(displayTrackpad, "displayTrackpad")
+            // A session already running is told at once: the point of the setting is to change
+            // which way round the tablet reads touch while you are using it.
+            AppModel.shared.publishDisplayInputMode()
+        }
+    }
     @Published var lowBatteryThreshold: Int { didSet { save(lowBatteryThreshold, "lowBatteryThreshold") } }
     @Published var fullBatteryAlert: Bool { didSet { save(fullBatteryAlert, "fullBatteryAlert") } }
 
@@ -33,6 +42,8 @@ final class AppSettings: ObservableObject {
         watchKeyControl = d.object(forKey: "watchKeyControl") as? Bool ?? false
         lowBatteryAlert = d.object(forKey: "lowBatteryAlert") as? Bool ?? true
         idleWirelessDebugging = d.object(forKey: "idleWirelessDebugging") as? Bool ?? true
+        pointerBanner = d.object(forKey: "pointerBanner") as? Bool ?? true
+        displayTrackpad = d.object(forKey: "displayTrackpad") as? Bool ?? false
         lowBatteryThreshold = d.object(forKey: "lowBatteryThreshold") as? Int ?? 15
         fullBatteryAlert = d.object(forKey: "fullBatteryAlert") as? Bool ?? false
     }

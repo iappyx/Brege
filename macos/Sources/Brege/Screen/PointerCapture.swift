@@ -38,6 +38,9 @@ final class PointerCapture {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var edgeMonitor: Any?
+    private var tapWatchdog: Timer?
+    private var escapeMonitor: Any?
+    private var tapRepairs = 0
     private var buttons: UInt8 = 0
     private var modifiers: UInt8 = 0
     private var keysDown: [UInt8] = []
@@ -100,6 +103,7 @@ final class PointerCapture {
         CGAssociateMouseAndMouseCursorPosition(0)
         CGDisplayHideCursor(CGMainDisplayID())
         isCapturing = true
+        startSafetyNet()
 
         // Plug the phone's mouse and keyboard in for as long as the pointer is over there. Leaving
         // them registered would leave its cursor sitting on screen after the pointer came back.
@@ -136,9 +140,13 @@ final class PointerCapture {
         // Unplugging both devices makes the phone hide its cursor straight away.
         send?(UhidInput.destroy(UhidInput.keyboardID))
         send?(UhidInput.destroy(UhidInput.pointerID))
+        stopSafetyNet()
         if let tap {
             CGEvent.tapEnable(tap: tap, enable: false)
             if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
+            // Letting go of the reference does not close the Mach port behind the tap, and capture
+            // starts and stops every time the pointer crosses the edge.
+            CFMachPortInvalidate(tap)
         }
         tap = nil
         runLoopSource = nil
@@ -152,6 +160,51 @@ final class PointerCapture {
         }
         returnPoint = nil
         onCaptureChanged?(false)
+    }
+
+    // MARK: Safety net
+
+    /// Two ways out of a capture that has lost its tap.
+    ///
+    /// macOS disables an event tap whose callback is slow to return, and announces it through that
+    /// same callback — no use when the main thread is what was slow, because the announcement waits
+    /// in the queue with everything else. The tap is then dead while the cursor is still unpinned
+    /// from the mouse and nothing is left to notice Control-Escape: the Mac's pointer is frozen
+    /// until the app quits. So the tap is also watched from the outside, and a plain event monitor
+    /// watches for Control-Escape — one that only ever sees a key at all once the tap has stopped
+    /// consuming them.
+    private func startSafetyNet() {
+        tapRepairs = 0
+        tapWatchdog = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor [weak self] in self?.checkTap() }
+        }
+        escapeMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard let self, self.isCapturing else { return }
+            if event.keyCode == 53, event.modifierFlags.contains(.control) { self.endCapture() }
+        }
+    }
+
+    private func stopSafetyNet() {
+        tapWatchdog?.invalidate()
+        tapWatchdog = nil
+        if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
+        escapeMonitor = nil
+    }
+
+    /// Revives a disabled tap once. A tap that stays down gives the pointer back rather than leave
+    /// this Mac without one.
+    private func checkTap() {
+        guard isCapturing else { return }
+        guard let tap, CGEvent.tapIsEnabled(tap: tap) else {
+            tapRepairs += 1
+            if let tap, tapRepairs == 1 {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            } else {
+                endCapture()
+            }
+            return
+        }
+        tapRepairs = 0
     }
 
     // MARK: Events

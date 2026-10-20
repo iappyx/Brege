@@ -583,6 +583,99 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Second display
+
+    /// The tablet standing in for a display of this Mac, if any.
+    @Published private(set) var displayDevice: String?
+
+    private var displaySession: DisplaySession?
+    /// What each tablet said its screen is, reported when it connects.
+    private var displayScreens: [String: (width: Int, height: Int, scale: Int, h265: Bool)] = [:]
+
+    /// Makes a tablet into a display of this Mac, or takes it away again.
+    func toggleSecondDisplay(for device: Device) {
+        if displayDevice == device.id { return stopSecondDisplay() }
+        startSecondDisplay(for: device)
+    }
+
+    /// Starts a session, or starts it over at a new size when the tablet has turned.
+    private func startSecondDisplay(for device: Device) {
+        // Starting over for the same tablet must not tell it the session is over: that would close
+        // the screen it is about to need again. It asked for this by turning.
+        stopSecondDisplay(tellTablet: displayDevice != device.id)
+        guard let node else { return }
+
+        // The tablet's own screen and codec, so the picture fills it instead of being
+        // letterboxed and upscaled. Without a report yet, 1080p in H.264 is the safe guess.
+        let screen = displayScreens[device.id] ?? (width: 1920, height: 1080, scale: 2, h265: false)
+        let session = DisplaySession(
+            codec: screen.h265 ? .hevc : .h264,
+            stats: {
+                let counts = node.displayStreamStats()
+                return (sent: counts.sent, dropped: counts.dropped)
+            },
+            send: { flags, pts, data in
+                node.sendDisplayPacket(flags: flags, ptsUs: pts, data: data)
+            }
+        )
+        do {
+            // The display first: its size is what the tablet is then told to expect.
+            try session.createDisplay(width: screen.width, height: screen.height, scale: screen.scale)
+            try node.offerDisplay(deviceId: device.id, codec: session.codecName,
+                                  width: UInt32(session.width), height: UInt32(session.height),
+                                  refreshHz: UInt32(session.refreshHz), scale: UInt32(session.scale))
+        } catch {
+            session.stop()
+            return showError("The second display could not start", error)
+        }
+        displaySession = session
+        displayDevice = device.id
+        publishDisplayInputMode()
+        DisplayLog.write("offered \(session.width)x\(session.height) scale \(session.scale) "
+            + "\(session.codecName) at \(session.suggestedBitsPerSecond / 1_000_000) Mbit/s "
+            + "to \(device.name), touch allowed: \(DisplayTouch.isAllowed)")
+        if !macActions.canSendKeys {
+            showNotice("Touch will not work yet",
+                       "Allow Brêge under Privacy & Security › Accessibility to tap and scroll on "
+                           + "the tablet. The display itself works without it.")
+        }
+        NSLog("Brêge: offered a %ux%u display to %@ (%@)", UInt32(session.width),
+              UInt32(session.height), device.name, device.id)
+
+        Task { @MainActor in
+            do {
+                try await node.openDisplayStream(deviceId: device.id)
+                try await session.startStreaming(bitsPerSecond: session.suggestedBitsPerSecond)
+                NSLog("Brêge: the second display is streaming to %@", device.name)
+            } catch {
+                self.stopSecondDisplay()
+                self.showError("The second display could not start", error)
+            }
+        }
+    }
+
+    /// Tells the tablet now showing this Mac how to read touch. Called when the setting changes.
+    func publishDisplayInputMode() {
+        guard let displayDevice else { return }
+        try? node?.setDisplayInputMode(deviceId: displayDevice,
+                                       trackpad: AppSettings.shared.displayTrackpad)
+    }
+
+    func stopSecondDisplay() {
+        stopSecondDisplay(tellTablet: true)
+    }
+
+    private func stopSecondDisplay(tellTablet: Bool) {
+        guard let session = displaySession else { return }
+        displaySession = nil
+        // Nothing may be left held: a session that ends mid-drag would leave the button down.
+        DisplayTouch.release(displayID: session.displayID)
+        if tellTablet, let displayDevice { try? node?.stopDisplay(deviceId: displayDevice, reason: "") }
+        node?.closeDisplayStream()
+        session.stop()
+        displayDevice = nil
+    }
+
     // MARK: - Phone pointer
 
     /// The phone currently holding this Mac's pointer and keyboard, if any.
@@ -592,6 +685,7 @@ final class AppModel: ObservableObject {
 
     private var pointerSession: PointerSession?
     private let pointerCapture = PointerCapture()
+    private let pointerIndicator = PointerIndicator()
 
     /// Hands this Mac's pointer and keyboard to the phone, or gives them back.
     func togglePhonePointer(for device: Device) {
@@ -613,9 +707,7 @@ final class AppModel: ObservableObject {
             return
         }
         let session = PointerSession(adb: adb, phoneIP: ip)
-        session.switchOnWirelessDebugging = { [weak self] in
-            DispatchQueue.main.sync { self?.switchOnWirelessDebugging(deviceId: device.id) ?? false }
-        }
+        session.switchOnWirelessDebugging = wirelessDebuggingSwitch(deviceId: device.id)
         session.onScreenSize = { [weak self] width, _ in
             Task { @MainActor in self?.pointerCapture.phoneWidth = width }
         }
@@ -624,7 +716,16 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 self.pointerCapture.send = { [weak session] report in session?.send(report) }
                 self.pointerCapture.onCaptureChanged = { [weak self] capturing in
-                    Task { @MainActor in self?.pointerCaptured = capturing }
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.pointerCaptured = capturing
+                        // Reading every keystroke is invisible to macOS; say so plainly.
+                        if capturing, AppSettings.shared.pointerBanner {
+                            self.pointerIndicator.show(edge: self.pointerCapture.edge, device: device.name)
+                        } else {
+                            self.pointerIndicator.hide()
+                        }
+                    }
                 }
                 self.pointerCapture.startWatchingEdge()
             }
@@ -642,6 +743,7 @@ final class AppModel: ObservableObject {
     }
 
     func stopPhonePointer() {
+        pointerIndicator.hide()
         pointerCapture.endCapture()
         pointerCapture.stopWatchingEdge()
         pointerCapture.send = nil
@@ -652,8 +754,15 @@ final class AppModel: ObservableObject {
     }
 
     /// Asks the phone to switch wireless debugging on (it can once the Mac granted it permission).
-    func switchOnWirelessDebugging(deviceId: String) -> Bool {
-        (try? node?.sendCommand(deviceId: deviceId, command: .enableWirelessDebugging)) != nil
+    /// Asks the phone to switch wireless debugging on, as a closure a session can call itself.
+    ///
+    /// A session needs the answer before it can go on, and it asks from its own thread. Hopping to
+    /// the main thread and waiting there deadlocks the moment the main thread is itself waiting on
+    /// that session. The core handle is safe to call from any thread, so the closure takes a copy
+    /// of it and the question never leaves the thread that asked.
+    func wirelessDebuggingSwitch(deviceId: String) -> () -> Bool {
+        let node = self.node
+        return { (try? node?.sendCommand(deviceId: deviceId, command: .enableWirelessDebugging)) != nil }
     }
 
     /// The phone's current IP address while it is connected, for screen sharing.
@@ -715,6 +824,8 @@ final class AppModel: ObservableObject {
             switchOffWirelessDebugging()
         }
         stopMicrophone()
+        // Quitting takes the display with it; macOS hands the windows back before the app goes.
+        stopSecondDisplay()
         drives.ejectAll(node: node)
         clipboard.stop()
         bonjour?.stop()
@@ -1139,6 +1250,40 @@ final class AppModel: ObservableObject {
             confirmPairing(PairingRequest(id: requestId, deviceId: deviceId, name: name))
         case .pairingWaitingForConfirmation:
             break // Phone-side event.
+        case .displayOffered, .displayInputModeSet:
+            break // Phone-side events: the Mac is the one that decides both.
+        case let .displayStopped(from, reason):
+            // Sent by the tablet when it stops showing the display — it closed the screen, or it
+            // is busy with another Mac, which is what the reason says.
+            guard from == displayDevice else { break }
+            stopSecondDisplay()
+            if !reason.isEmpty { showNotice("The second display stopped", reason) }
+        case let .displayPointerReceived(from, phase, x, y, dx, dy, relative):
+            guard from == displayDevice, let session = displaySession else { break }
+            DisplayTouch.apply(phase: phase, relative: relative, x: x, y: y, dx: dx, dy: dy,
+                               displayID: session.displayID)
+        case let .displayKeyframeRequested(from):
+            // The tablet has just started decoding, or lost frames: it cannot begin at anything
+            // but a key frame, and waiting for the next scheduled one would leave it blank.
+            if from == displayDevice { displaySession?.requestKeyframe() }
+        case let .displayCapabilitiesReported(from, width, height, densityDpi, h265, maxRefreshHz):
+            // A dense screen gets a Retina display, so macOS draws at full resolution and the text
+            // is sharp; a coarse one would only end up with everything too small to read.
+            let scale = densityDpi >= 240 ? 2 : 1
+            let screen = (width: Int(width), height: Int(height), scale: scale, h265: h265)
+            displayScreens[from] = screen
+            // A tablet that has turned reports a different shape. A display that exists cannot be
+            // rotated — the interface has no way to — so it is made again at the new size. Windows
+            // on it go back to a real screen in the moment between, which is the price of turning.
+            if from == displayDevice, let session = displaySession,
+               session.width != screen.width || session.height != screen.height,
+               let device = devices.first(where: { $0.id == from }) {
+                DisplayLog.write("the tablet turned: \(session.width)x\(session.height) → "
+                    + "\(screen.width)x\(screen.height), making the display again")
+                startSecondDisplay(for: device)
+            }
+            NSLog("Brêge: %@ can show %ux%u at %u dpi, up to %u Hz, H.265: %@, scale %d", from,
+                  width, height, densityDpi, maxRefreshHz, h265 ? "yes" : "no", scale)
         case let .devicePaired(device):
             inviteURI = nil
             justPaired = device.name
@@ -1312,6 +1457,9 @@ final class AppModel: ObservableObject {
         live.clear(deviceId: deviceId)
         endCalls(deviceId: deviceId)
         if micDevice == deviceId { stopMicrophone() }
+        // A display whose tablet has gone is a screen nobody can see, with the user's windows on
+        // it: it has to go the moment the link does.
+        if displayDevice == deviceId { stopSecondDisplay() }
         drives.eject(deviceId: deviceId, node: node)
         media[deviceId] = nil
     }

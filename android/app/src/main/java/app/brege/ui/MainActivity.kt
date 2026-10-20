@@ -203,7 +203,6 @@ class MainActivity : ComponentActivity() {
         }
         PermissionGroup.MESSAGES -> listOf(
             Manifest.permission.READ_SMS,
-            Manifest.permission.RECEIVE_SMS,
             Manifest.permission.SEND_SMS,
             Manifest.permission.READ_CONTACTS,
         )
@@ -467,6 +466,10 @@ private fun BregeScreen(
             }
 
             if (devices.isNotEmpty()) {
+                DisplayCard()
+            }
+
+            if (devices.isNotEmpty()) {
                 FoldersCard(refreshTick = refreshTick, onAdd = onAddFolder, onChanged = { clickTick++ })
             }
 
@@ -662,6 +665,31 @@ private fun ScreenCard(refreshTick: Int) {
                 OutlinedButton(onClick = { WirelessDebugging.openSettings(context) }) {
                     Text(if (developer) "Open Developer options" else "Open About phone")
                 }
+            }
+        }
+    }
+}
+
+/** The Mac's second display. Opening it here means it is already waiting when the Mac offers. */
+@Composable
+private fun DisplayCard() {
+    val context = LocalContext.current
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("A second display for your Mac", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Click Display in Brêge on your Mac and this screen becomes one of its displays, to " +
+                    "drag windows onto. Open it here first and it is ready the moment the Mac asks. " +
+                    "Touch moves the Mac's pointer, and two fingers scroll. Whether this screen " +
+                    "points where you touch or works as a trackpad is set on the Mac, in Brêge's " +
+                    "settings. " +
+                    "Protected video does not play on the Mac while a display is on.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = {
+                context.startActivity(Intent(context, app.brege.display.MacDisplayActivity::class.java))
+            }) {
+                Text("Open the display")
             }
         }
     }

@@ -29,6 +29,7 @@ pub enum StreamType {
     File = 2,
     Fs = 3,
     Video = 4,
+    Display = 5,
 }
 
 impl StreamType {
@@ -38,6 +39,7 @@ impl StreamType {
             2 => Some(Self::File),
             3 => Some(Self::Fs),
             4 => Some(Self::Video),
+            5 => Some(Self::Display),
             _ => None,
         }
     }

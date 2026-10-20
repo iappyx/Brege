@@ -173,6 +173,7 @@ private struct GeneralSettings: View {
 private struct PhoneSettings: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject private var hotspot = AppModel.shared.hotspot
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         Form {
@@ -206,6 +207,16 @@ private struct PhoneSettings: View {
                     Caption("Brêge only announces itself, connects and answers on the networks and VPNs you use it on. Elsewhere it stays silent, so others on the network cannot see it. Location access lets Brêge show Wi‑Fi names.")
                 }
             }
+            Section {
+                Toggle("Switch wireless debugging off when idle", isOn: $settings.idleWirelessDebugging)
+                Toggle("Show a band while the phone has the pointer", isOn: $settings.pointerBanner)
+                Toggle("Use a tablet showing this Mac as a trackpad", isOn: $settings.displayTrackpad)
+            } header: {
+                Text("Phone Screen")
+            } footer: {
+                Caption("Five minutes after the last screen or pointer window closes, the phone switches wireless debugging off again, so it does not stay open to the network. It comes back on by itself the next time this Mac needs it.\n\nThe band marks the edge to push back through, and says that what you type is going to the phone — macOS shows nothing of its own for that. Control-Esc always brings the pointer back, band or no band.\n\nA tablet used as a second display points where you touch, which suits one standing in front of you. As a trackpad it moves the pointer from where it is, a tap clicks there, and holding still picks something up to drag — better for a tablet beside the keyboard, and the pointer can then leave the tablet's own screen for the Mac's.")
+            }
+
             Section {
                 LabeledContent("Add another phone") {
                     Button("Pair a Phone…") {
@@ -310,14 +321,6 @@ private struct NotificationSettings: View {
                 Text("Screenshots")
             } footer: {
                 Caption("A screenshot taken on the phone lands on this Mac's clipboard, with a preview you can drag.")
-            }
-
-            Section {
-                Toggle("Switch wireless debugging off when idle", isOn: $settings.idleWirelessDebugging)
-            } header: {
-                Text("Phone Screen")
-            } footer: {
-                Caption("Five minutes after the last screen or pointer window closes, the phone switches wireless debugging off again, so it does not stay open to the network. It comes back on by itself the next time this Mac needs it.")
             }
 
             Section("Phone Battery") {

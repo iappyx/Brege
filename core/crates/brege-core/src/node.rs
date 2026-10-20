@@ -80,6 +80,9 @@ pub(crate) struct Inner {
     pub audio_sink: std::sync::RwLock<Option<Arc<dyn crate::AudioSink>>>,
     pub video_sink: std::sync::RwLock<Option<Arc<dyn crate::VideoSink>>>,
     pub(crate) video: crate::video::VideoSender,
+    /// Phone side: receives the Mac's second display.
+    pub display_sink: std::sync::RwLock<Option<Arc<dyn crate::DisplaySink>>>,
+    pub(crate) display: crate::display::DisplaySender,
 }
 
 impl Inner {
@@ -205,6 +208,8 @@ impl Node {
             audio_sink: std::sync::RwLock::new(None),
             video_sink: std::sync::RwLock::new(None),
             video: Default::default(),
+            display_sink: std::sync::RwLock::new(None),
+            display: Default::default(),
         });
 
         let filter: std::sync::Weak<dyn brege_transport::SourceFilter> =
@@ -1145,6 +1150,80 @@ impl Node {
 
     pub fn close_video_stream(&self) {
         self.inner.video.close();
+    }
+
+    // --- the Mac's second display ---------------------------------------------------------------
+
+    /// Phone side: where the Mac's display frames go; `None` drops them.
+    pub fn set_display_sink(&self, sink: Option<Arc<dyn crate::DisplaySink>>) {
+        *self.inner.display_sink.write().unwrap() = sink;
+    }
+
+    /// Mac side: tells a tablet what is coming, before the first frame.
+    pub fn offer_display(&self, tablet: DeviceId, offer: proto::DisplayOffer) -> Result<()> {
+        self.inner.send_to(&tablet, Payload::DisplayOffer(offer))
+    }
+
+    /// Ends the session, in either direction: the Mac taking the display away, or the tablet
+    /// saying it has stopped showing it. `reason` is empty unless there is something to tell the
+    /// user, such as the tablet already showing another Mac.
+    pub fn stop_display(&self, peer: DeviceId, reason: String) -> Result<()> {
+        self.inner
+            .send_to(&peer, Payload::DisplayStop(proto::DisplayStop { reason }))
+    }
+
+    /// Mac side: how the tablet should read touch — as a touchscreen, or as a trackpad.
+    pub fn set_display_input_mode(&self, tablet: DeviceId, trackpad: bool) -> Result<()> {
+        self.inner.send_to(
+            &tablet,
+            Payload::DisplayInputMode(proto::DisplayInputMode { trackpad }),
+        )
+    }
+
+    /// Phone side: touch on the tablet, for the Mac to act on.
+    pub fn send_display_pointer(
+        &self,
+        mac: DeviceId,
+        pointer: proto::DisplayPointer,
+    ) -> Result<()> {
+        self.inner.send_to(&mac, Payload::DisplayPointer(pointer))
+    }
+
+    /// Phone side: reports what its screen and decoder can take.
+    pub fn report_display_capabilities(
+        &self,
+        mac: DeviceId,
+        capabilities: proto::DisplayCapabilities,
+    ) -> Result<()> {
+        self.inner
+            .send_to(&mac, Payload::DisplayCapabilities(capabilities))
+    }
+
+    /// Phone side: asks for a frame it can start decoding at.
+    pub fn request_display_keyframe(&self, mac: DeviceId) -> Result<()> {
+        self.inner.send_to(
+            &mac,
+            Payload::DisplayKeyframeRequest(proto::DisplayKeyframeRequest {}),
+        )
+    }
+
+    /// Mac side: opens the display stream to the tablet that accepted the offer.
+    pub async fn open_display_stream(&self, tablet: DeviceId) -> Result<()> {
+        crate::display::DisplaySender::open(&self.inner, tablet).await
+    }
+
+    /// Mac side: sends one encoded packet (blocking briefly for config and key frames).
+    pub fn send_display_packet(&self, flags: u8, pts_us: u64, data: Vec<u8>) -> bool {
+        self.inner.display.send(flags, pts_us, data)
+    }
+
+    /// Mac side: frames queued and frames dropped for want of room, since the stream opened.
+    pub fn display_stream_stats(&self) -> (u64, u64) {
+        self.inner.display.stats()
+    }
+
+    pub fn close_display_stream(&self) {
+        self.inner.display.close();
     }
 
     /// Mac side: where microphone audio from phones goes; `None` drops it.

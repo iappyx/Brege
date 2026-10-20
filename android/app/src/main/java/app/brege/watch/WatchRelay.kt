@@ -48,11 +48,34 @@ class WatchRelay : WearableListenerService() {
     }
 
     override fun onMessageReceived(event: MessageEvent) {
+        if (!fromConnectedWatch(event.sourceNodeId)) return
         when (event.path) {
             PATH_ACTION -> onAction(event.data)
             PATH_ASK -> sendState()
             else -> Unit
         }
+    }
+
+    /**
+     * Whether this really came from a watch, which is the only thing allowed to press the Mac's keys
+     * through here.
+     *
+     * This service is exported because Play Services, a different app, is what delivers wearable
+     * messages to it — so any app on the phone can aim an intent at the component and ask for a
+     * ring, a lock or a keystroke on the Mac. Play Services may well check its callers before
+     * dispatching, but that is its business and not visible from here, so the question is settled
+     * where the answer can be seen: a message whose sender is not a node this phone is currently
+     * talking to did not come from your watch, whoever sent it.
+     */
+    private fun fromConnectedWatch(nodeId: String): Boolean {
+        if (nodeId.isEmpty()) return false
+        val known = runCatching {
+            com.google.android.gms.tasks.Tasks
+                .await(Wearable.getNodeClient(applicationContext).connectedNodes)
+                .any { it.id == nodeId }
+        }.getOrDefault(false)
+        if (!known) UptimeLog.record("watch: ignored a message that no connected watch sent")
+        return known
     }
 
     private fun onAction(data: ByteArray) {

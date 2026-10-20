@@ -400,6 +400,11 @@ struct DeviceCard: View {
                  symbol: pointerOn ? "cursorarrow.rays" : "cursorarrow",
                  help: "Use this Mac's mouse and keyboard on the phone itself: push the pointer against the screen edge to cross over, and off the far side of the phone to come back (or Control-Escape). Needs wireless debugging",
                  enabled: connected) { model.togglePhonePointer(for: device) }
+            let displayOn = model.displayDevice == device.id
+            Tile(displayOn ? "Display On" : "Display",
+                 symbol: displayOn ? "display.and.arrow.down" : "display",
+                 help: "Use the tablet as a second display of this Mac: drag a window onto it as you would with any monitor. Needs Screen Recording in Privacy & Security, and protected video (streaming services) will not play on this Mac while it is on",
+                 enabled: connected) { model.toggleSecondDisplay(for: device) }
             MenuTile("Apps", symbol: "square.grid.3x3",
                      help: "Open a phone app in a window (needs wireless debugging), or see what is installed",
                      enabled: connected) {

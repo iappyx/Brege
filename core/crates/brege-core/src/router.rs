@@ -11,6 +11,15 @@ use brege_store::NotificationRecord;
 use crate::node::Inner;
 use crate::{Event, messaging, session, transfers};
 
+/// Whether a display size is one a screen could really have.
+///
+/// Peer-supplied, and it reaches the macOS display interface, a hardware encoder and a decoder on
+/// the phone. Absurd values are refused rather than clamped: a device reporting nonsense has
+/// nothing useful to show at a corrected size either.
+fn plausible_display(width: u32, height: u32) -> bool {
+    (16..=7680).contains(&width) && (16..=7680).contains(&height)
+}
+
 pub(crate) async fn dispatch(inner: &std::sync::Arc<Inner>, from: DeviceId, payload: Payload) {
     let Some(payload) = messaging::dispatch(inner, from, payload) else {
         return;
@@ -81,6 +90,52 @@ pub(crate) async fn dispatch(inner: &std::sync::Arc<Inner>, from: DeviceId, payl
         }
         Payload::MicState(state) => inner.emit(Event::MicStateChanged { from, state }),
         Payload::CameraRequest(request) => inner.emit(Event::CameraRequested { from, request }),
+        Payload::DisplayOffer(mut offer) => {
+            crate::apps::truncate(&mut offer.codec, 16);
+            if !plausible_display(offer.width, offer.height) {
+                return;
+            }
+            offer.refresh_hz = offer.refresh_hz.clamp(24, 240);
+            offer.scale = offer.scale.clamp(1, 2);
+            inner.emit(Event::DisplayOffered { from, offer })
+        }
+        Payload::DisplayStop(mut stop) => {
+            // Shown to the user, so bounded like every other string a peer sends.
+            crate::apps::truncate(&mut stop.reason, 300);
+            inner.emit(Event::DisplayStopped {
+                from,
+                reason: stop.reason,
+            })
+        }
+        Payload::DisplayInputMode(mode) => inner.emit(Event::DisplayInputModeSet {
+            from,
+            trackpad: mode.trackpad,
+        }),
+        Payload::DisplayPointer(mut pointer) => {
+            // These four drive synthesized pointer events on the other side. A value that is not
+            // finite reaches a cast that traps, and one out of range aims at a point no display
+            // covers — so the promise the schema makes is enforced here rather than trusted.
+            if ![pointer.x, pointer.y, pointer.dx, pointer.dy]
+                .iter()
+                .all(|value| value.is_finite())
+            {
+                return;
+            }
+            pointer.x = pointer.x.clamp(0.0, 1.0);
+            pointer.y = pointer.y.clamp(0.0, 1.0);
+            pointer.dx = pointer.dx.clamp(-1.0, 1.0);
+            pointer.dy = pointer.dy.clamp(-1.0, 1.0);
+            inner.emit(Event::DisplayPointerReceived { from, pointer })
+        }
+        Payload::DisplayKeyframeRequest(_) => inner.emit(Event::DisplayKeyframeRequested { from }),
+        Payload::DisplayCapabilities(mut capabilities) => {
+            if !plausible_display(capabilities.width, capabilities.height) {
+                return;
+            }
+            capabilities.density_dpi = capabilities.density_dpi.clamp(72, 800);
+            capabilities.max_refresh_hz = capabilities.max_refresh_hz.clamp(24, 240);
+            inner.emit(Event::DisplayCapabilitiesReported { from, capabilities })
+        }
         Payload::CameraState(mut state) => {
             crate::apps::truncate(&mut state.codec, 16);
             crate::apps::truncate(&mut state.detail, 300);

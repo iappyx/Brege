@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - name: Format
+        run: cargo fmt --all --check
+        working-directory: core
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: core
+      - name: Test
+        run: cargo test --workspace
+        working-directory: core
+      # core/sim is a separate workspace, so the line above does not reach it. The guard is
+      # because the suite is not published yet: publish it and this starts gating, rather than
+      # the workflow failing on a clean checkout in the meantime.
+      - name: End-to-end tests
+        if: hashFiles('core/sim/Cargo.toml') != ''
+        run: cargo test --manifest-path core/sim/Cargo.toml
+
+  macos:
+    runs-on: macos-15
+    needs: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - run: scripts/build-core-apple.sh
+      - name: Build the Mac app's targets
+        run: swift build -c release
+        working-directory: macos
+      - run: scripts/build-macos-app.sh
+
+  android:
+    runs-on: macos-15
+    needs: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "platforms;android-37" "build-tools;36.0.0" "ndk;30.0.16248370"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+      - run: scripts/build-core-android.sh
+      - run: ./gradlew assembleDebug lintDebug
+        working-directory: android

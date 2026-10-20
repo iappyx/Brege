@@ -571,6 +571,52 @@ pub enum BregeEvent {
         from: String,
         activity: OngoingActivityData,
     },
+    /// Phone: the Mac is about to send its second display.
+    DisplayOffered {
+        from: String,
+        codec: String,
+        width: u32,
+        height: u32,
+        refresh_hz: u32,
+        scale: u32,
+    },
+    /// The display session is over: the Mac took it away, or the tablet stopped showing it.
+    DisplayStopped {
+        from: String,
+        /// Empty when it was simply switched off; otherwise what to tell the user.
+        reason: String,
+    },
+    /// Phone: how the Mac wants touch read — as a touchscreen, or as a trackpad.
+    DisplayInputModeSet {
+        from: String,
+        trackpad: bool,
+    },
+    /// Mac: touch on the tablet, to act on the second display.
+    DisplayPointerReceived {
+        from: String,
+        phase: DisplayTouchPhase,
+        /// 0…1 across and down the display, rather than pixels of either side.
+        x: f32,
+        y: f32,
+        /// The scroll, or the movement when `relative`, as a fraction of the display.
+        dx: f32,
+        dy: f32,
+        /// Trackpad rather than touchscreen: move the cursor from where it is, and act there.
+        relative: bool,
+    },
+    /// Mac: the tablet needs a frame it can start decoding at.
+    DisplayKeyframeRequested {
+        from: String,
+    },
+    /// Mac: what the tablet's screen and decoder can take.
+    DisplayCapabilitiesReported {
+        from: String,
+        width: u32,
+        height: u32,
+        density_dpi: u32,
+        h265: bool,
+        max_refresh_hz: u32,
+    },
     CameraRequested {
         from: String,
         start: bool,
@@ -934,6 +980,44 @@ fn convert_event(event: Event) -> Option<BregeEvent> {
             sample_rate: state.sample_rate,
             detail: state.detail,
         },
+        Event::DisplayOffered { from, offer } => BregeEvent::DisplayOffered {
+            from: from.to_string(),
+            codec: offer.codec,
+            width: offer.width,
+            height: offer.height,
+            refresh_hz: offer.refresh_hz,
+            scale: offer.scale,
+        },
+        Event::DisplayStopped { from, reason } => BregeEvent::DisplayStopped {
+            from: from.to_string(),
+            reason,
+        },
+        Event::DisplayInputModeSet { from, trackpad } => BregeEvent::DisplayInputModeSet {
+            from: from.to_string(),
+            trackpad,
+        },
+        Event::DisplayPointerReceived { from, pointer } => BregeEvent::DisplayPointerReceived {
+            from: from.to_string(),
+            phase: DisplayTouchPhase::from_proto(pointer.phase),
+            x: pointer.x,
+            y: pointer.y,
+            dx: pointer.dx,
+            dy: pointer.dy,
+            relative: pointer.relative,
+        },
+        Event::DisplayKeyframeRequested { from } => BregeEvent::DisplayKeyframeRequested {
+            from: from.to_string(),
+        },
+        Event::DisplayCapabilitiesReported { from, capabilities } => {
+            BregeEvent::DisplayCapabilitiesReported {
+                from: from.to_string(),
+                width: capabilities.width,
+                height: capabilities.height,
+                density_dpi: capabilities.density_dpi,
+                h265: capabilities.h265,
+                max_refresh_hz: capabilities.max_refresh_hz,
+            }
+        }
         Event::CameraRequested { from, request } => BregeEvent::CameraRequested {
             from: from.to_string(),
             start: request.start,
@@ -1164,6 +1248,64 @@ pub trait VideoPacketListener: Send + Sync {
     /// `flags`: 1 = codec config, 2 = key frame. `data` is Annex-B.
     fn on_video_packet(&self, from: String, flags: u8, pts_us: u64, data: Vec<u8>);
     fn on_video_end(&self, from: String);
+}
+
+/// How the display stream is coping, counted since it opened.
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct DisplayStreamStatsData {
+    pub sent: u64,
+    pub dropped: u64,
+}
+
+/// What a touch on the tablet is doing, for the Mac to turn into pointer events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum DisplayTouchPhase {
+    Down,
+    Move,
+    Up,
+    Scroll,
+}
+
+impl DisplayTouchPhase {
+    fn from_proto(value: i32) -> Self {
+        match proto::DisplayPointerPhase::try_from(value) {
+            Ok(proto::DisplayPointerPhase::DisplayPointerDown) => Self::Down,
+            Ok(proto::DisplayPointerPhase::DisplayPointerUp) => Self::Up,
+            Ok(proto::DisplayPointerPhase::DisplayPointerScroll) => Self::Scroll,
+            _ => Self::Move,
+        }
+    }
+
+    fn to_proto(self) -> proto::DisplayPointerPhase {
+        match self {
+            Self::Down => proto::DisplayPointerPhase::DisplayPointerDown,
+            Self::Move => proto::DisplayPointerPhase::DisplayPointerMove,
+            Self::Up => proto::DisplayPointerPhase::DisplayPointerUp,
+            Self::Scroll => proto::DisplayPointerPhase::DisplayPointerScroll,
+        }
+    }
+}
+
+/// Receives the Mac's second display on the phone. Called on a core thread per packet; copy and
+/// return.
+#[uniffi::export(foreign)]
+pub trait DisplayPacketListener: Send + Sync {
+    /// `flags`: 1 = codec config, 2 = key frame. `data` is Annex-B.
+    fn on_display_packet(&self, from: String, flags: u8, pts_us: u64, data: Vec<u8>);
+    fn on_display_end(&self, from: String);
+}
+
+struct DisplayAdapter(Arc<dyn DisplayPacketListener>);
+
+impl brege_core::DisplaySink for DisplayAdapter {
+    fn on_display_packet(&self, from: DeviceId, flags: u8, pts_us: u64, data: &[u8]) {
+        self.0
+            .on_display_packet(from.to_string(), flags, pts_us, data.to_vec());
+    }
+
+    fn on_display_end(&self, from: DeviceId) {
+        self.0.on_display_end(from.to_string());
+    }
 }
 
 struct VideoAdapter(Arc<dyn VideoPacketListener>);
@@ -2929,6 +3071,125 @@ impl BregeNode {
             .ok()
             .flatten()
             .map(|id| id.to_string())
+    }
+
+    // --- the Mac's second display ---
+
+    /// Phone: receives the Mac's display frames.
+    pub fn set_display_listener(&self, listener: Arc<dyn DisplayPacketListener>) {
+        self.node
+            .set_display_sink(Some(Arc::new(DisplayAdapter(listener))));
+    }
+
+    /// Mac: tells a tablet what is coming, before the first frame.
+    pub fn offer_display(
+        &self,
+        device_id: String,
+        codec: String,
+        width: u32,
+        height: u32,
+        refresh_hz: u32,
+        scale: u32,
+    ) -> Result<()> {
+        Ok(self.node.offer_display(
+            parse_id(&device_id)?,
+            proto::DisplayOffer {
+                codec,
+                width,
+                height,
+                refresh_hz,
+                scale,
+            },
+        )?)
+    }
+
+    /// Ends the session, from either side. `reason` is empty unless there is something to tell
+    /// the user, such as the tablet already showing another Mac.
+    pub fn stop_display(&self, device_id: String, reason: String) -> Result<()> {
+        Ok(self.node.stop_display(parse_id(&device_id)?, reason)?)
+    }
+
+    /// Mac: how the tablet should read touch — as a touchscreen, or as a trackpad.
+    pub fn set_display_input_mode(&self, device_id: String, trackpad: bool) -> Result<()> {
+        Ok(self
+            .node
+            .set_display_input_mode(parse_id(&device_id)?, trackpad)?)
+    }
+
+    /// Phone: a touch on the tablet, for the Mac to act on.
+    #[allow(clippy::too_many_arguments)]
+    pub fn send_display_pointer(
+        &self,
+        device_id: String,
+        phase: DisplayTouchPhase,
+        x: f32,
+        y: f32,
+        dx: f32,
+        dy: f32,
+        relative: bool,
+    ) -> Result<()> {
+        Ok(self.node.send_display_pointer(
+            parse_id(&device_id)?,
+            proto::DisplayPointer {
+                phase: phase.to_proto() as i32,
+                x,
+                y,
+                dx,
+                dy,
+                relative,
+            },
+        )?)
+    }
+
+    /// Phone: reports what its screen and decoder can take, so the Mac does not have to guess.
+    pub fn report_display_capabilities(
+        &self,
+        device_id: String,
+        width: u32,
+        height: u32,
+        density_dpi: u32,
+        h265: bool,
+        max_refresh_hz: u32,
+    ) -> Result<()> {
+        Ok(self.node.report_display_capabilities(
+            parse_id(&device_id)?,
+            proto::DisplayCapabilities {
+                width,
+                height,
+                density_dpi,
+                h265,
+                max_refresh_hz,
+            },
+        )?)
+    }
+
+    /// Phone: asks for a frame it can start decoding at, having just started or lost frames.
+    pub fn request_display_keyframe(&self, device_id: String) -> Result<()> {
+        Ok(self.node.request_display_keyframe(parse_id(&device_id)?)?)
+    }
+
+    /// Mac: opens the display stream to the tablet.
+    pub async fn open_display_stream(&self, device_id: String) -> Result<()> {
+        let id = parse_id(&device_id)?;
+        let node = self.node.clone();
+        Ok(on_runtime(async move { node.open_display_stream(id).await }).await?)
+    }
+
+    /// Mac: sends one encoded packet from the encoder thread (not the main thread: it can wait
+    /// briefly for config and key frames). Returns false when no stream is open.
+    pub fn send_display_packet(&self, flags: u8, pts_us: u64, data: Vec<u8>) -> bool {
+        self.node.send_display_packet(flags, pts_us, data)
+    }
+
+    /// Mac: how the display stream is coping. `dropped` counts frames the link had no room for,
+    /// which is the signal to encode more cheaply.
+    pub fn display_stream_stats(&self) -> DisplayStreamStatsData {
+        let (sent, dropped) = self.node.display_stream_stats();
+        DisplayStreamStatsData { sent, dropped }
+    }
+
+    pub fn close_display_stream(&self) {
+        self.node.close_display_stream();
     }
 
     // --- phone camera ---
