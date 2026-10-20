@@ -1,11 +1,11 @@
 package app.brege.controls
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import app.brege.BregeApplication
 import app.brege.R
 
@@ -37,6 +37,6 @@ object ControlsAccessNotice {
                 )
             )
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(ID, notification) }
+        runCatching { context.getSystemService(NotificationManager::class.java).notify(ID, notification) }
     }
 }

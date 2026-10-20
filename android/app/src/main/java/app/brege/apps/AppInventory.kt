@@ -1,6 +1,7 @@
 package app.brege.apps
 
 import android.app.AppOpsManager
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.usage.StorageStatsManager
 import android.app.usage.UsageStatsManager
@@ -12,7 +13,6 @@ import android.net.Uri
 import android.os.Process
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import app.brege.BregeApplication
 import app.brege.R
 import app.brege.core.Core
@@ -103,7 +103,7 @@ object AppInventory {
                 )
             )
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification) }
+        runCatching { context.getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification) }
         UptimeLog.record("apps: ${kind.name.lowercase()} requested for $packageName")
     }
 
