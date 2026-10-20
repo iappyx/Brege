@@ -63,8 +63,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      # packages: '' because this action's default list still asks for "tools", which Google no
+      # longer serves — sdkmanager then exits 1 and fails the job. Everything needed is installed
+      # on the next line anyway.
       - uses: android-actions/setup-android@v3
-      - run: sdkmanager "platforms;android-37" "build-tools;36.0.0" "ndk;30.0.16248370"
+        with:
+          packages: ''
+      # android-37.0, not android-37: API 17's platform package really is named with the minor
+      # version (AndroidVersion.ApiLevel=37.0 in its source.properties).
+      - run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "ndk;30.0.16248370"
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-ndk

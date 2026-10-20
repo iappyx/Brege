@@ -74,7 +74,10 @@ fi
 
 IDENTITY=""
 if [ "${ADHOC:-0}" != "1" ]; then
-  IDENTITY="${BREGE_SIGN_IDENTITY:-$(security find-identity -p codesigning 2>/dev/null | grep "Brege Local Development" | awk '{print $2}' | head -1)}"
+  # `|| true` because of `set -o pipefail`: on a machine without the identity grep matches
+  # nothing and returns 1, which would end the script here instead of falling through to the
+  # ad-hoc signature below.
+  IDENTITY="${BREGE_SIGN_IDENTITY:-$(security find-identity -p codesigning 2>/dev/null | grep "Brege Local Development" | awk '{print $2}' | head -1 || true)}"
 fi
 if [ -n "$IDENTITY" ]; then
   codesign --force --sign "$IDENTITY" --timestamp=none "$APP/Contents/Helpers/BregeServices"
